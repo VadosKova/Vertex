@@ -61,3 +61,25 @@ class RegisterSerializer(serializers.ModelSerializer):
             "access": str(refresh.access_token),
             "refresh": str(refresh),
         }
+
+
+class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        attrs[self.username_field] = attrs[self.username_field].strip().lower()
+        data = super().validate(attrs)
+        data["user"] = UserSettingsSerializer(self.user).data
+        return data
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value
