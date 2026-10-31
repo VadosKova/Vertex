@@ -26,3 +26,38 @@ class UserSettingsSerializer(serializers.ModelSerializer):
 
     def validate_username(self, value):
         return clean_username(value)
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    username = serializers.CharField(max_length=30)
+    gender = serializers.ChoiceField(choices=User.Gender.choices)
+
+    class Meta:
+        model = User
+        fields = ("email", "username", "gender", "password", "language")
+        extra_kwargs = {"language": {"required": False}}
+
+    def validate_username(self, value):
+        return clean_username(value)
+
+    def validate_email(self, value):
+        value = value.strip().lower()
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
+
+    def create(self, validated_data):
+        return User.objects.create_user(**validated_data)
+
+    def to_representation(self, instance):
+        refresh = RefreshToken.for_user(instance)
+        return {
+            "user": UserSettingsSerializer(instance).data,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
