@@ -17,3 +17,25 @@ RESET_TEXT = {
     "uk": ("Відновлення пароля Vertex", "Щоб встановити новий пароль, перейдіть за посиланням:\n{link}"),
     "en": ("Vertex password reset", "To set a new password open this link:\n{link}"),
 }
+
+
+class RegisterView(generics.CreateAPIView):
+    serializer_class = s.RegisterSerializer
+    permission_classes = [permissions.AllowAny]
+    authentication_classes: list = []
+    throttle_scope = "auth"
+
+
+class LoginView(TokenObtainPairView):
+    serializer_class = s.EmailTokenObtainPairSerializer
+    throttle_scope = "auth"
+
+
+class MeView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = s.UserSettingsSerializer
+
+    def get_object(self):
+        return self.request.user
+
+    def perform_destroy(self, instance):
+        instance.delete()
