@@ -39,3 +39,21 @@ class MeView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_destroy(self, instance):
         instance.delete()
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes: list = []
+    throttle_scope = "auth"
+
+    def post(self, request):
+        ser = s.PasswordResetRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        user = User.objects.filter(email__iexact=ser.validated_data["email"], is_active=True).first()
+        if user:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            link = settings.PASSWORD_RESET_LINK.format(uid=uid, token=token)
+            subject, body = RESET_TEXT.get(user.language, RESET_TEXT["uk"])
+            send_mail(subject, body.format(link=link), settings.DEFAULT_FROM_EMAIL, [user.email])
+        return Response({"detail": "If the account exists, an email has been sent."})
