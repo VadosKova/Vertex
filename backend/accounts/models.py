@@ -25,3 +25,25 @@ class UserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra):
         extra.update(is_staff=True, is_superuser=True)
         return self._create(email, password, **extra)
+
+
+class User(AbstractBaseUser, PermissionsMixin):
+    class Language(models.TextChoices):
+        UK = "uk", "Українська"
+        EN = "en", "English"
+
+    class Theme(models.TextChoices):
+        LIGHT = "light", "Light"
+        DARK = "dark", "Dark"
+        SYSTEM = "system", "System"
+
+    class Gender(models.TextChoices):
+        MALE = "male", "Male"
+        FEMALE = "female", "Female"
+
+    email = models.EmailField(unique=True)
+    username = models.CharField(max_length=30)
+    gender = models.CharField(max_length=6, choices=Gender.choices, blank=True)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    date_joined = models.DateTimeField(default=timezone.now)
