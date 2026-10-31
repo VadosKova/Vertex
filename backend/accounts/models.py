@@ -47,3 +47,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
+
+    language = models.CharField(max_length=2, choices=Language.choices, default=Language.UK)
+    theme = models.CharField(max_length=6, choices=Theme.choices, default=Theme.SYSTEM)
+    reminder_enabled = models.BooleanField(default=True)
+    last_reminder_at = models.DateTimeField(null=True, blank=True)
+
+    objects = UserManager()
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["username"]
+
+    def __str__(self):
+        return self.email
