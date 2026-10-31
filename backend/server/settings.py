@@ -60,7 +60,6 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'Vertex <no-reply@vertex.app>'
 PASSWORD_RESET_LINK = 'vertex://reset-password?uid={uid}&token={token}'
 
