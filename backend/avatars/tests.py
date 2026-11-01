@@ -76,7 +76,7 @@ class AvatarCrudTests(BaseTest):
 
     def test_gender_required_if_account_has_none(self):
         User.objects.filter(pk=self.user.pk).update(gender="")
-        self.user.refresh_from_db()  # the logged-in object must see the change
+        self.user.refresh_from_db()
         p = self.payload()
         del p["gender"]
         r = self.client.post(reverse("avatar-list"), p, format="json")
@@ -149,3 +149,24 @@ class AvatarCrudTests(BaseTest):
         self.assertEqual(self.client.delete(url).status_code, 404)
         self.assertEqual(self.client.post(reverse("avatar-set-default", args=[theirs.pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse("avatar-list")).data, [])
+
+
+class DraftTests(BaseTest):
+    def test_draft_roundtrip_and_cleared_on_avatar_create(self):
+        self.assertIsNone(self.client.get(reverse("avatar-draft")).data["payload"])
+        r = self.client.put(reverse("avatar-draft"), {"payload": {"height_cm": 181, "step": 2}}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.client.get(reverse("avatar-draft")).data["payload"]["height_cm"], 181)
+        self.client.put(reverse("avatar-draft"), {"payload": {"height_cm": 182}}, format="json")
+        self.assertEqual(self.client.get(reverse("avatar-draft")).data["payload"], {"height_cm": 182})
+        self.client.post(reverse("avatar-list"), self.payload(), format="json")
+        self.assertIsNone(self.client.get(reverse("avatar-draft")).data["payload"])
+
+    def test_draft_validation_delete_and_isolation(self):
+        self.assertEqual(self.client.put(reverse("avatar-draft"), {"payload": "str"}, format="json").status_code, 400)
+        self.client.put(reverse("avatar-draft"), {"payload": {"a": 1}}, format="json")
+        self.client.force_authenticate(self.other)
+        self.assertIsNone(self.client.get(reverse("avatar-draft")).data["payload"])
+        self.client.force_authenticate(self.user)
+        self.assertEqual(self.client.delete(reverse("avatar-draft")).status_code, 204)
+        self.assertIsNone(self.client.get(reverse("avatar-draft")).data["payload"])
