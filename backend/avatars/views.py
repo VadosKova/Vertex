@@ -39,3 +39,22 @@ class AvatarViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         extra = {"measurements_updated_at": timezone.now()} if "measurements" in serializer.validated_data else {}
         serializer.save(**extra)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        was_default, user = instance.is_default, instance.user
+        instance.delete()
+        if was_default:
+            newest = Avatar.objects.filter(user=user).first()
+            if newest:
+                newest.is_default = True
+                newest.save(update_fields=["is_default"])
+
+    @action(detail=True, methods=["post"], url_path="set-default")
+    @transaction.atomic
+    def set_default(self, request, pk=None):
+        avatar = self.get_object()
+        Avatar.objects.filter(user=request.user, is_default=True).exclude(pk=avatar.pk).update(is_default=False)
+        avatar.is_default = True
+        avatar.save(update_fields=["is_default"])
+        return Response(self.get_serializer(avatar).data)
