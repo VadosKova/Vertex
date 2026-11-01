@@ -23,3 +23,26 @@ class AvatarSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("Name cannot be empty")
         return value
+
+    def validate_height_cm(self, v):
+        if not HEIGHT_RANGE[0] <= v <= HEIGHT_RANGE[1]:
+            raise serializers.ValidationError(f"Must be between {HEIGHT_RANGE[0]} and {HEIGHT_RANGE[1]} cm.")
+        return v
+
+    def validate_weight_kg(self, v):
+        if not WEIGHT_RANGE[0] <= v <= WEIGHT_RANGE[1]:
+            raise serializers.ValidationError(f"Must be between {WEIGHT_RANGE[0]} and {WEIGHT_RANGE[1]} kg.")
+        return v
+
+    def validate_age(self, v):
+        if not AGE_RANGE[0] <= v <= AGE_RANGE[1]:
+            raise serializers.ValidationError(f"Must be between {AGE_RANGE[0]} and {AGE_RANGE[1]}.")
+        return v
+
+    def validate_measurements(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Must be an object.")
+        errors = validate_measurements(value)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return value
