@@ -29,3 +29,26 @@ class BaseTest(APITestCase):
                     measurements=dict(CORE))
         base.update(over)
         return Avatar.objects.create(**base)
+
+
+class MeasurementRulesTests(BaseTest):
+    def test_spec_covers_all_24_fields_from_tz(self):
+        self.assertEqual(len(SPEC), 24)
+        r = self.client.get(reverse("measurement-spec"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual({x["key"] for x in r.data}, set(SPEC))
+        self.assertIn("uk", r.data[0]["hint"])
+
+    def test_range_and_cross_field_validation(self):
+        self.assertTrue(validate_measurements({"waist_circumference": 500}))
+        self.assertTrue(validate_measurements({"nonsense": 1}))
+        self.assertTrue(validate_measurements({"chest_circumference": "big"}))
+        self.assertTrue(validate_measurements({"bicep_relaxed": 40, "bicep_flexed": 30}))
+        self.assertTrue(validate_measurements({"inseam": 90, "outseam": 85}))
+        self.assertEqual(validate_measurements({"chest_circumference": 96, "underbust_circumference": 80}), {})
+
+    def test_estimate_missing_flags_estimated_fields(self):
+        full, est = estimate_missing(180, "male", {"inseam": 82})
+        self.assertNotIn("inseam", est)
+        self.assertIn("shoulder_width", est)
+        self.assertAlmostEqual(full["shoulder_width"], 46.6, places=1)
