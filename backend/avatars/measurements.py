@@ -74,3 +74,16 @@ def validate_measurements(data: dict) -> dict:
 def validate_bmi(height_cm, weight_kg):
     bmi = weight_kg / (height_cm / 100) ** 2
     return None if 12 <= bmi <= 60 else "Height/weight combination looks implausible."
+
+
+def estimate_missing(height_cm: float, gender: str, measurements: dict):
+    idx = 0 if gender == "male" else 1
+    full, estimated = dict(measurements), []
+    for key, ratios in _RATIOS.items():
+        if key not in full:
+            full[key] = round(height_cm * ratios[idx], 1)
+            estimated.append(key)
+    if "thigh_circumference" not in full and "hip_circumference" in full:
+        full["thigh_circumference"] = round(full["hip_circumference"] * 0.58, 1)
+        estimated.append("thigh_circumference")
+    return full, estimated
