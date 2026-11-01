@@ -58,3 +58,25 @@ class AvatarViewSet(viewsets.ModelViewSet):
         avatar.is_default = True
         avatar.save(update_fields=["is_default"])
         return Response(self.get_serializer(avatar).data)
+
+
+class AvatarDraftView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def get(self, request):
+        draft = AvatarDraft.objects.filter(user=request.user).first()
+        if not draft:
+            return Response({"payload": None})
+        return Response({"payload": draft.payload, "updated_at": draft.updated_at})
+
+    def put(self, request):
+        payload = request.data.get("payload")
+        if not isinstance(payload, dict) or len(str(payload)) > 20000:
+            return Response({"payload": ["Must be an object (max ~20 KB)."]}, status=400)
+        draft, _ = AvatarDraft.objects.update_or_create(user=request.user, defaults={"payload": payload})
+        return Response({"payload": draft.payload, "updated_at": draft.updated_at})
+
+    def delete(self, request):
+        AvatarDraft.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
