@@ -1,15 +1,21 @@
+from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db import transaction
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import JSONParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .measurements import SPEC
-from .models import Avatar, AvatarDraft
-from .serializers import AvatarSerializer
+from .models import Avatar, AvatarDraft, AvatarPhoto
+from .serializers import AvatarPhotoSerializer, AvatarSerializer
+from .services import photo_quality
+from .services.photo_processing import InvalidPhoto, load_and_sanitise
 
 
 class MeasurementSpecView(APIView):
