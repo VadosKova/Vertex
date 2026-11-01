@@ -42,3 +42,30 @@ _RATIOS = {
     "foot_length": (0.150, 0.145),
     "foot_width": (0.057, 0.054),
 }
+
+
+def validate_measurements(data: dict) -> dict:
+    errors = {}
+    for key, value in data.items():
+        if key not in SPEC:
+            errors[key] = "Unknown measurement."
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            errors[key] = "Must be a number."
+            continue
+        lo, hi = SPEC[key][1], SPEC[key][2]
+        if not lo <= value <= hi:
+            errors[key] = f"Must be between {lo} and {hi} cm."
+    if errors:
+        return errors
+
+    def pair(a, b, ok, msg):
+        if a in data and b in data and not ok(data[a], data[b]):
+            errors[a] = msg
+
+    pair("underbust_circumference", "chest_circumference", lambda u, c: u <= c, "Underbust cannot exceed chest.")
+    pair("bicep_relaxed", "bicep_flexed", lambda r, f: r <= f, "Relaxed bicep cannot exceed flexed.")
+    pair("inseam", "outseam", lambda i, o: i < o, "Inseam must be shorter than outseam.")
+    pair("foot_width", "foot_length", lambda w, l: w < l, "Foot width must be smaller than length.")
+    pair("wrist_circumference", "forearm_circumference", lambda w, f: w <= f, "Wrist cannot exceed forearm.")
+    return errors
