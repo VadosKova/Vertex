@@ -20,3 +20,12 @@ class MeasurementSpecView(APIView):
             {"key": k, "group": g, "min": lo, "max": hi, "unit": "cm", "hint": {"uk": uk, "en": en}}
             for k, (g, lo, hi, uk, en) in SPEC.items()
         ])
+
+
+class AvatarViewSet(viewsets.ModelViewSet):
+    serializer_class = AvatarSerializer
+    pagination_class = None
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        return Avatar.objects.filter(user=self.request.user)
