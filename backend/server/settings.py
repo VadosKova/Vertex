@@ -53,6 +53,11 @@ SIMPLE_JWT = {
 
 GOOGLE_OAUTH_CLIENT_IDS = [x for x in os.environ.get('GOOGLE_OAUTH_CLIENT_IDS', '').split(',') if x]
 
+MEDIA_ROOT = BASE_DIR / 'media'
+FILE_ENCRYPTION_KEY = os.environ['FILE_ENCRYPTION_KEY']
+MAX_PHOTO_BYTES = 8 * 1024 * 1024
+MAX_PHOTOS_PER_AVATAR = 3
+
 DEFAULT_FROM_EMAIL = 'Vertex <no-reply@vertex.app>'
 PASSWORD_RESET_LINK = 'vertex://reset-password?uid={uid}&token={token}'
 
