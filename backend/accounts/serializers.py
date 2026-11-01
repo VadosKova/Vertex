@@ -83,3 +83,12 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     def validate_new_password(self, value):
         validate_password(value)
         return value
+
+
+class GoogleLoginSerializer(serializers.Serializer):
+    id_token = serializers.CharField()
+    username = serializers.CharField(max_length=30, required=False)
+    gender = serializers.ChoiceField(choices=User.Gender.choices, required=False)
+
+    def validate_username(self, value):
+        return clean_username(value)
