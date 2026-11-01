@@ -43,3 +43,9 @@ class Avatar(models.Model):
 
     def full_measurements(self):
         return estimate_missing(self.height_cm, self.gender, self.measurements)
+
+
+class AvatarDraft(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar_draft")
+    payload = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
