@@ -1,7 +1,13 @@
 from rest_framework import serializers
 
 from .measurements import (AGE_RANGE, HEIGHT_RANGE, REQUIRED, WEIGHT_RANGE, validate_bmi, validate_measurements)
-from .models import Avatar
+from .models import Avatar, AvatarPhoto
+
+
+class AvatarPhotoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AvatarPhoto
+        fields = ("id", "kind", "quality", "created_at")
 
 
 class AvatarSerializer(serializers.ModelSerializer):
