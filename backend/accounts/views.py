@@ -10,6 +10,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import serializers as s
+from .google import GoogleNotConfigured, InvalidGoogleToken, sign_in_with_google, verify_google_token
+from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
 
@@ -76,3 +78,34 @@ class PasswordResetConfirmView(APIView):
         user.set_password(ser.validated_data["new_password"])
         user.save(update_fields=["password"])
         return Response({"detail": "Password updated."})
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes: list = []
+    throttle_scope = "auth"
+
+    def post(self, request):
+        ser = s.GoogleLoginSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        try:
+            info = verify_google_token(data["id_token"])
+        except GoogleNotConfigured:
+            return Response({"detail": "Google sign-in is not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except InvalidGoogleToken:
+            return Response({"detail": "Invalid Google token."}, status=status.HTTP_401_UNAUTHORIZED)
+        if not info.get("email") or not info.get("email_verified"):
+            return Response({"detail": "Google account email is not verified."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user, created = sign_in_with_google(info, username=data.get("username"), gender=data.get("gender"))
+        if not user.is_active:
+            return Response({"detail": "Account is disabled."}, status=status.HTTP_403_FORBIDDEN)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "user": s.UserSettingsSerializer(user).data,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "created": created,
+            "profile_complete": bool(user.gender),
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
