@@ -46,3 +46,24 @@ class AvatarSerializer(serializers.ModelSerializer):
         if errors:
             raise serializers.ValidationError(errors)
         return value
+
+    def validate(self, attrs):
+        inst = self.instance
+        user = self.context["request"].user
+        if inst is None:
+            attrs.setdefault("name", user.username or "Me")
+            if "gender" not in attrs:
+                if not user.gender:
+                    raise serializers.ValidationError({"gender": "This field is required."})
+                attrs["gender"] = user.gender
+        height = attrs.get("height_cm", getattr(inst, "height_cm", None))
+        weight = attrs.get("weight_kg", getattr(inst, "weight_kg", None))
+        if height and weight:
+            msg = validate_bmi(height, weight)
+            if msg:
+                raise serializers.ValidationError({"weight_kg": msg})
+        merged = attrs.get("measurements", getattr(inst, "measurements", {}))
+        missing = [k for k in REQUIRED if k not in merged]
+        if missing:
+            raise serializers.ValidationError({"measurements": {k: "This measurement is required." for k in missing}})
+        return attrs
