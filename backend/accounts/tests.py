@@ -84,7 +84,7 @@ class AuthTests(APITestCase):
         self.assertTrue(User.objects.get(email="alice@example.com").check_password("Brand-new-pass-9"))
         again = self.client.post(reverse("password-reset-confirm"),
                                  {"uid": uid, "token": token, "new_password": "Third-pass-word-3"})
-        self.assertEqual(again.status_code, 400)  # token is single-use
+        self.assertEqual(again.status_code, 400)
 
     def test_password_reset_does_not_reveal_unknown_email(self):
         r = self.client.post(reverse("password-reset"), {"email": "ghost@example.com"})
@@ -126,3 +126,115 @@ class SettingsTests(APITestCase):
     def test_delete_account(self):
         self.assertEqual(self.client.delete(reverse("me")).status_code, 204)
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
+
+# --Google sign-in--
+from unittest import mock
+
+from django.test import override_settings
+
+from .google import InvalidGoogleToken
+
+GOOGLE = {"sub": "google-123", "email": "gina@example.com", "email_verified": True, "name": "Gina Green"}
+
+
+def google_login(client, claims=None, **extra):
+    claims = {**GOOGLE, **(claims or {})}
+    with mock.patch("accounts.views.verify_google_token", return_value=claims):
+        return client.post(reverse("google-login"), {"id_token": "fake", **extra}, format="json")
+
+
+class GoogleLoginTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_new_google_user_is_created_with_tokens(self):
+        r = google_login(self.client)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(r.data["created"])
+        self.assertIn("access", r.data)
+        self.assertEqual((r.data["user"]["email"], r.data["user"]["username"]), ("gina@example.com", "Gina Green"))
+        self.assertFalse(r.data["profile_complete"])
+        user = User.objects.get(email="gina@example.com")
+        self.assertEqual(user.google_sub, "google-123")
+        self.assertFalse(user.has_usable_password())
+
+    def test_username_and_gender_from_register_screen_are_used_for_new_accounts(self):
+        r = google_login(self.client, username="Гіна", gender="female")
+        self.assertEqual((r.data["user"]["username"], r.data["user"]["gender"]), ("Гіна", "female"))
+        self.assertTrue(r.data["profile_complete"])
+
+    def test_second_login_returns_same_user(self):
+        google_login(self.client)
+        r = google_login(self.client, username="Ignored", gender="male")
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data["created"])
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(r.data["user"]["username"], "Gina Green")
+
+    def test_google_id_wins_over_changed_email(self):
+        google_login(self.client)
+        r = google_login(self.client, {"email": "new-address@example.com"})
+        self.assertEqual((r.status_code, User.objects.count()), (200, 1))
+
+    def test_links_existing_password_account_and_invalidates_password(self):
+        User.objects.create_user("gina@example.com", PASSWORD, username="Gina")
+        r = google_login(self.client, {"email": "Gina@Example.com"})
+        self.assertEqual((r.status_code, r.data["created"]), (200, False))
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(User.objects.get().google_sub, "google-123")
+        bad = self.client.post(reverse("token"), {"email": "gina@example.com", "password": PASSWORD})
+        self.assertEqual(bad.status_code, 401)
+
+    def test_google_account_can_set_a_password_via_reset(self):
+        google_login(self.client)
+        self.client.post(reverse("password-reset"), {"email": "gina@example.com"})
+        body = mail.outbox[0].body
+        uid, token = body.split("uid=")[1].split("&")[0], body.split("token=")[1].split()[0]
+        ok = self.client.post(reverse("password-reset-confirm"),
+                              {"uid": uid, "token": token, "new_password": "Brand-new-pass-9"})
+        self.assertEqual(ok.status_code, 200)
+        r = self.client.post(reverse("token"), {"email": "gina@example.com", "password": "Brand-new-pass-9"})
+        self.assertEqual(r.status_code, 200)
+
+    def test_unverified_email_is_rejected(self):
+        r = google_login(self.client, {"email_verified": False})
+        self.assertEqual(r.status_code, 401)
+        self.assertFalse(User.objects.exists())
+
+    def test_invalid_token_gives_401(self):
+        with mock.patch("accounts.views.verify_google_token", side_effect=InvalidGoogleToken):
+            r = self.client.post(reverse("google-login"), {"id_token": "garbage"}, format="json")
+        self.assertEqual(r.status_code, 401)
+
+    @override_settings(GOOGLE_OAUTH_CLIENT_IDS=[])
+    def test_not_configured_gives_503(self):
+        r = self.client.post(reverse("google-login"), {"id_token": "x"}, format="json")
+        self.assertEqual(r.status_code, 503)
+
+    @override_settings(GOOGLE_OAUTH_CLIENT_IDS=["web-id", "android-id"])
+    def test_verifier_passes_our_client_ids_as_audience_and_maps_errors(self):
+        with mock.patch("accounts.google.id_token.verify_oauth2_token", return_value=GOOGLE) as v:
+            r = self.client.post(reverse("google-login"), {"id_token": "tok"}, format="json")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(v.call_args.kwargs["audience"], ["web-id", "android-id"])
+        with mock.patch("accounts.google.id_token.verify_oauth2_token", side_effect=ValueError("wrong audience")):
+            r = self.client.post(reverse("google-login"), {"id_token": "tok"}, format="json")
+        self.assertEqual(r.status_code, 401)
+
+    def test_disabled_account_cannot_sign_in(self):
+        User.objects.create_user("gina@example.com", PASSWORD, username="Gina", is_active=False)
+        self.assertEqual(google_login(self.client).status_code, 403)
+
+    def test_input_validation(self):
+        self.assertEqual(self.client.post(reverse("google-login"), {}, format="json").status_code, 400)
+        self.assertEqual(google_login(self.client, gender="other").status_code, 400)
+        self.assertEqual(google_login(self.client, username="G").status_code, 400)
+
+    def test_default_username_fallbacks(self):
+        r = google_login(self.client, {"name": "X" * 50})
+        self.assertEqual(len(r.data["user"]["username"]), 30)
+        r = google_login(self.client, {"sub": "s2", "email": "ab.cd@example.com", "name": ""})
+        self.assertEqual(r.data["user"]["username"], "ab.cd")
+        r = google_login(self.client, {"sub": "s3", "email": "q@example.com", "name": "Q"})
+        self.assertEqual(r.data["user"]["username"], "User")
