@@ -5,4 +5,4 @@ class AvatarsConfig(AppConfig):
     name = "avatars"
 
     def ready(self):
-        from . import signals
+        from . import signals  # noqa: F401
