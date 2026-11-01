@@ -69,3 +69,8 @@ def validate_measurements(data: dict) -> dict:
     pair("foot_width", "foot_length", lambda w, l: w < l, "Foot width must be smaller than length.")
     pair("wrist_circumference", "forearm_circumference", lambda w, f: w <= f, "Wrist cannot exceed forearm.")
     return errors
+
+
+def validate_bmi(height_cm, weight_kg):
+    bmi = weight_kg / (height_cm / 100) ** 2
+    return None if 12 <= bmi <= 60 else "Height/weight combination looks implausible."
