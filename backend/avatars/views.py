@@ -29,3 +29,13 @@ class AvatarViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Avatar.objects.filter(user=self.request.user)
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        first = not Avatar.objects.filter(user=self.request.user).exists()
+        serializer.save(user=self.request.user, is_default=first)
+        AvatarDraft.objects.filter(user=self.request.user).delete()
+
+    def perform_update(self, serializer):
+        extra = {"measurements_updated_at": timezone.now()} if "measurements" in serializer.validated_data else {}
+        serializer.save(**extra)
