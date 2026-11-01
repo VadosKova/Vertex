@@ -44,6 +44,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=30)
     gender = models.CharField(max_length=6, choices=Gender.choices, blank=True)
+    google_sub = models.CharField(max_length=64, unique=True, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
