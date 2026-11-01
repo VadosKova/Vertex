@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .measurements import estimate_missing
+from .storage import private_storage
 
 
 class Avatar(models.Model):
@@ -49,3 +50,19 @@ class AvatarDraft(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar_draft")
     payload = models.JSONField(default=dict)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class AvatarPhoto(models.Model):
+    class Kind(models.TextChoices):
+        FRONT = "front"
+        PROFILE = "profile"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    avatar = models.ForeignKey(Avatar, on_delete=models.CASCADE, related_name="photos")
+    kind = models.CharField(max_length=7, choices=Kind.choices, default=Kind.FRONT)
+    file = models.FileField(upload_to="photos/%Y/%m/", storage=private_storage)
+    quality = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
