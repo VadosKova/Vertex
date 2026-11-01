@@ -11,6 +11,7 @@ class AvatarPhotoSerializer(serializers.ModelSerializer):
 
 
 class AvatarSerializer(serializers.ModelSerializer):
+    photos = AvatarPhotoSerializer(many=True, read_only=True)
     name = serializers.CharField(max_length=60, required=False)
     gender = serializers.ChoiceField(choices=Avatar.Gender.choices, required=False)
     estimated_fields = serializers.SerializerMethodField()
@@ -18,7 +19,7 @@ class AvatarSerializer(serializers.ModelSerializer):
     class Meta:
         model = Avatar
         fields = ("id", "name", "gender", "age", "height_cm", "weight_kg", "body_type", "measurements",
-                  "estimated_fields", "measurements_updated_at", "is_default", "created_at")
+                  "estimated_fields", "measurements_updated_at", "is_default", "photos", "created_at")
         read_only_fields = ("id", "measurements_updated_at", "is_default", "created_at")
 
     def get_estimated_fields(self, obj):
