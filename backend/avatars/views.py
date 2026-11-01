@@ -34,7 +34,7 @@ class AvatarViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
-        return Avatar.objects.filter(user=self.request.user)
+        return Avatar.objects.filter(user=self.request.user).prefetch_related("photos")
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -64,6 +64,44 @@ class AvatarViewSet(viewsets.ModelViewSet):
         avatar.is_default = True
         avatar.save(update_fields=["is_default"])
         return Response(self.get_serializer(avatar).data)
+
+    @action(detail=True, methods=["post"], parser_classes=[MultiPartParser, FormParser])
+    def photos(self, request, pk=None):
+        avatar = self.get_object()
+        if avatar.photos.count() >= settings.MAX_PHOTOS_PER_AVATAR:
+            return Response({"detail": f"At most {settings.MAX_PHOTOS_PER_AVATAR} photos."}, status=400)
+        upload = request.FILES.get("image")
+        kind = request.data.get("kind", AvatarPhoto.Kind.FRONT)
+        if not upload:
+            return Response({"image": ["This field is required."]}, status=400)
+        if kind not in AvatarPhoto.Kind.values:
+            return Response({"kind": ["Invalid kind."]}, status=400)
+        if upload.size > settings.MAX_PHOTO_BYTES:
+            return Response({"image": ["File too large."]}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        try:
+            img, jpeg = load_and_sanitise(upload.read())
+        except InvalidPhoto as exc:
+            return Response({"image": [str(exc)]}, status=400)
+        quality = photo_quality.assess(img)
+        if not quality["ok"]:
+            return Response({"detail": "Photo quality is too low.", "issues": quality["issues"], "quality": quality},
+                            status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        photo = AvatarPhoto(avatar=avatar, kind=kind, quality=quality)
+        photo.file.save(f"{photo.pk}.jpg", ContentFile(jpeg), save=False)
+        photo.save()
+        return Response(AvatarPhotoSerializer(photo).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get", "delete"], url_path=r"photos/(?P<photo_id>[0-9a-f-]+)")
+    def photo_detail(self, request, pk=None, photo_id=None):
+        avatar = self.get_object()
+        photo = get_object_or_404(AvatarPhoto, pk=photo_id, avatar=avatar)
+        if request.method == "DELETE":
+            photo.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        with photo.file.open("rb") as fh:
+            resp = HttpResponse(fh.read(), content_type="image/jpeg")
+        resp["Cache-Control"] = "private, no-store"
+        return resp
 
 
 class AvatarDraftView(APIView):
