@@ -51,6 +51,8 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+GOOGLE_OAUTH_CLIENT_IDS = [x for x in os.environ.get('GOOGLE_OAUTH_CLIENT_IDS', '').split(',') if x]
+
 DEFAULT_FROM_EMAIL = 'Vertex <no-reply@vertex.app>'
 PASSWORD_RESET_LINK = 'vertex://reset-password?uid={uid}&token={token}'
 
