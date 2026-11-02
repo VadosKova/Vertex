@@ -102,3 +102,35 @@ def _find_product_jsonld(soup):
         if found:
             return found
     return None
+
+
+def _parse_size_table(soup):
+    for table in soup.find_all("table"):
+        rows = table.find_all("tr")
+        if len(rows) < 2:
+            continue
+        headers = [c.get_text(" ", strip=True).lower() for c in rows[0].find_all(["th", "td"])]
+        size_col = next((i for i, h in enumerate(headers)
+                         if any(h.startswith(s) for s in SIZE_HEADERS)), None)
+        cols = {}
+        for i, h in enumerate(headers):
+            for zone, syns in MEASURE_SYNONYMS.items():
+                if i != size_col and zone not in cols and any(s in h for s in syns):
+                    cols[zone] = (i, bool(re.search(r"\b(in|inch|inches)\b", h)) or '"' in h)
+        if size_col is None or not cols:
+            continue
+        sizes = []
+        for order, row in enumerate(rows[1:]):
+            cells = [c.get_text(" ", strip=True) for c in row.find_all(["th", "td"])]
+            if len(cells) <= size_col or not cells[size_col]:
+                continue
+            entry = {"label": cells[size_col][:10].upper(), "order": order}
+            for zone, (i, inches) in cols.items():
+                rng = parse_range(cells[i], inches) if i < len(cells) else None
+                if rng:
+                    entry[f"{zone}_min"], entry[f"{zone}_max"] = round(rng[0], 1), round(rng[1], 1)
+            if len(entry) > 2:
+                sizes.append(entry)
+        if sizes:
+            return sizes
+    return []
