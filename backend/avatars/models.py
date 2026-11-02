@@ -30,6 +30,13 @@ class Avatar(models.Model):
     measurements = models.JSONField(default=dict, blank=True)
     measurements_updated_at = models.DateTimeField(default=timezone.now)
     is_default = models.BooleanField(default=False)
+
+    class Status(models.TextChoices):
+        DRAFT = "draft"
+        PROCESSING = "processing"
+        READY = "ready"
+        FAILED = "failed"
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
