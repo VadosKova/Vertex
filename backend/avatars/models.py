@@ -37,6 +37,16 @@ class Avatar(models.Model):
         READY = "ready"
         FAILED = "failed"
 
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    stage = models.CharField(max_length=30, blank=True)
+    progress = models.PositiveSmallIntegerField(default=0)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    needs_regeneration = models.BooleanField(default=True)
+    error = models.CharField(max_length=200, blank=True)
+    model_file = models.FileField(upload_to="avatars/", null=True, blank=True)
+    morph_params = models.JSONField(default=dict, blank=True)
+    face_data = models.JSONField(default=dict, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
