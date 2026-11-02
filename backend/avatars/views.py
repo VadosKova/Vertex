@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -15,6 +15,7 @@ from .measurements import SPEC
 from .models import Avatar, AvatarDraft, AvatarPhoto
 from .serializers import AvatarPhotoSerializer, AvatarSerializer
 from .services import photo_quality
+from .services.generator import is_busy, start_generation
 from .services.photo_processing import InvalidPhoto, load_and_sanitise
 
 
@@ -32,6 +33,7 @@ class AvatarViewSet(viewsets.ModelViewSet):
     serializer_class = AvatarSerializer
     pagination_class = None
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    throttle_scope = None
 
     def get_queryset(self):
         return Avatar.objects.filter(user=self.request.user).prefetch_related("photos")
@@ -43,7 +45,10 @@ class AvatarViewSet(viewsets.ModelViewSet):
         AvatarDraft.objects.filter(user=self.request.user).delete()
 
     def perform_update(self, serializer):
-        extra = {"measurements_updated_at": timezone.now()} if "measurements" in serializer.validated_data else {}
+        data = serializer.validated_data
+        extra = {"measurements_updated_at": timezone.now()} if "measurements" in data else {}
+        if {"measurements", "height_cm", "weight_kg", "gender", "age", "body_type"} & set(data):
+            extra["needs_regeneration"] = True
         serializer.save(**extra)
 
     @transaction.atomic
@@ -64,6 +69,30 @@ class AvatarViewSet(viewsets.ModelViewSet):
         avatar.is_default = True
         avatar.save(update_fields=["is_default"])
         return Response(self.get_serializer(avatar).data)
+
+    @action(detail=True, methods=["post"], throttle_scope="generate")
+    def generate(self, request, pk=None):
+        avatar = self.get_object()
+        if is_busy(avatar):
+            return Response({"detail": "Generation already in progress."}, status=status.HTTP_409_CONFLICT)
+        start_generation(avatar)
+        avatar.refresh_from_db()
+        return Response(self.get_serializer(avatar).data, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["get"], url_path="status")
+    def generation_status(self, request, pk=None):
+        a = self.get_object()
+        return Response({"status": a.status, "stage": a.stage, "progress": a.progress, "error": a.error,
+                         "needs_regeneration": a.needs_regeneration})
+
+    @action(detail=True, methods=["get"])
+    def model(self, request, pk=None):
+        avatar = self.get_object()
+        if avatar.status != Avatar.Status.READY or not avatar.model_file:
+            return Response({"detail": "Model is not ready."}, status=status.HTTP_404_NOT_FOUND)
+        resp = FileResponse(avatar.model_file.open("rb"), content_type="model/gltf-binary")
+        resp["Cache-Control"] = "private, max-age=3600"
+        return resp
 
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser, FormParser])
     def photos(self, request, pk=None):
@@ -89,6 +118,7 @@ class AvatarViewSet(viewsets.ModelViewSet):
         photo = AvatarPhoto(avatar=avatar, kind=kind, quality=quality)
         photo.file.save(f"{photo.pk}.jpg", ContentFile(jpeg), save=False)
         photo.save()
+        Avatar.objects.filter(pk=avatar.pk).update(needs_regeneration=True)
         return Response(AvatarPhotoSerializer(photo).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get", "delete"], url_path=r"photos/(?P<photo_id>[0-9a-f-]+)")
@@ -97,6 +127,7 @@ class AvatarViewSet(viewsets.ModelViewSet):
         photo = get_object_or_404(AvatarPhoto, pk=photo_id, avatar=avatar)
         if request.method == "DELETE":
             photo.delete()
+            Avatar.objects.filter(pk=avatar.pk).update(needs_regeneration=True)
             return Response(status=status.HTTP_204_NO_CONTENT)
         with photo.file.open("rb") as fh:
             resp = HttpResponse(fh.read(), content_type="image/jpeg")
