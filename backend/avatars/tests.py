@@ -14,6 +14,8 @@ CORE = {"chest_circumference": 96, "waist_circumference": 82, "hip_circumference
 
 class BaseTest(APITestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         self.user = User.objects.create_user("alice@example.com", PASSWORD, username="Alice", gender="female")
         self.other = User.objects.create_user("bob@example.com", PASSWORD, username="Bob", gender="male")
         self.client.force_authenticate(self.user)
@@ -336,3 +338,149 @@ class PhotoTests(BaseTest):
         with override_settings(FILE_ENCRYPTION_KEY=Fernet.generate_key().decode()):
             with self.assertRaises(Exception):
                 photo.file.open("rb")
+
+
+# --3D generation--
+import json
+import struct
+
+from .services.generator import compute_morph_params
+
+
+def read_glb(data: bytes):
+    magic, version, length = struct.unpack("<4sII", data[:12])
+    jlen, jtype = struct.unpack("<I4s", data[12:20])
+    doc = json.loads(data[20:20 + jlen])
+    off = 20 + jlen
+    blen, btype = struct.unpack("<I4s", data[off:off + 8])
+    return (magic, version, length), doc, (jtype, btype), data[off + 8:off + 8 + blen]
+
+
+@override_settings(MEDIA_ROOT=_TMP, FILE_ENCRYPTION_KEY=Fernet.generate_key().decode(), AVATAR_GENERATION_EAGER=True)
+class GenerationTests(BaseTest):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(_TMP, ignore_errors=True)
+
+    def generate(self, a):
+        return self.client.post(reverse("avatar-generate", args=[a.pk]))
+
+    def status(self, a):
+        return self.client.get(reverse("avatar-generation-status", args=[a.pk])).data
+
+    def test_generation_produces_valid_glb_and_ready_status(self):
+        a = self.make(height_cm=180, gender="male")
+        r = self.generate(a)
+        self.assertEqual(r.status_code, 202, r.data)
+        st = self.status(a)
+        self.assertEqual((st["status"], st["stage"], st["progress"], st["needs_regeneration"]), ("ready", "done", 100, False))
+        resp = self.client.get(reverse("avatar-model", args=[a.pk]))
+        self.assertEqual((resp.status_code, resp["Content-Type"]), (200, "model/gltf-binary"))
+        self.assertIn("private", resp["Cache-Control"])
+        data = b"".join(resp.streaming_content)
+        (magic, version, length), doc, (jtype, btype), binary = read_glb(data)
+        self.assertEqual((magic, version, length), (b"glTF", 2, len(data)))
+        self.assertEqual((jtype, btype), (b"JSON", b"BIN\x00"))
+        self.assertEqual(doc["buffers"][0]["byteLength"], len(binary))
+        self.assertAlmostEqual(doc["accessors"][0]["max"][1], 1.8, places=2)
+        self.assertIn("waist", doc["nodes"][0]["extras"]["morph"])
+
+    def test_response_exposes_model_url_only_when_ready(self):
+        a = self.make()
+        self.assertIsNone(self.client.get(reverse("avatar-detail", args=[a.pk])).data["model_url"])
+        self.generate(a)
+        data = self.client.get(reverse("avatar-detail", args=[a.pk])).data
+        self.assertTrue(data["model_url"].endswith(f"/api/v1/avatars/{a.pk}/model/"))
+        self.assertIn("waist", data["morph_params"])
+
+    def test_photo_is_analysed_during_generation(self):
+        a = self.make()
+        self.client.post(reverse("avatar-photos", args=[a.pk]), {"image": make_photo()}, format="multipart")
+        self.generate(a)
+        a.refresh_from_db()
+        self.assertEqual(a.face_data["engine"], "basic")
+        self.assertEqual(len(a.face_data["skin_rgb"]), 3)
+
+    def test_morph_params_reflect_body_shape(self):
+        slim = self.make(gender="male", height_cm=180, measurements={"chest_circumference": 80, "waist_circumference": 66, "hip_circumference": 88})
+        wide = self.make(gender="male", height_cm=180, weight_kg=110, measurements={"chest_circumference": 115, "waist_circumference": 105, "hip_circumference": 115})
+        s, w = compute_morph_params(slim), compute_morph_params(wide)
+        self.assertLess(s["waist"], 0)
+        self.assertGreater(w["waist"], s["waist"])
+        self.assertTrue(all(-0.5 <= w[k] <= 0.5 for k in ("chest", "waist", "hips", "shoulders")))
+        self.assertGreater(w["bmi"], s["bmi"])
+
+    def test_model_flag_goes_stale_after_edits_and_photos(self):
+        a = self.make()
+        self.generate(a)
+        self.assertFalse(self.status(a)["needs_regeneration"])
+        self.client.patch(reverse("avatar-detail", args=[a.pk]), {"name": "Renamed"}, format="json")
+        self.assertFalse(self.status(a)["needs_regeneration"])
+        self.client.patch(reverse("avatar-detail", args=[a.pk]), {"weight_kg": 70}, format="json")
+        self.assertTrue(self.status(a)["needs_regeneration"])
+        self.generate(a)
+        self.client.post(reverse("avatar-photos", args=[a.pk]), {"image": make_photo()}, format="multipart")
+        self.assertTrue(self.status(a)["needs_regeneration"])
+
+    def test_regeneration_replaces_the_old_file(self):
+        a = self.make()
+        self.generate(a)
+        a.refresh_from_db()
+        first = Path(a.model_file.path)
+        self.assertTrue(first.exists())
+        self.client.patch(reverse("avatar-detail", args=[a.pk]), {"height_cm": 175}, format="json")
+        self.generate(a)
+        a.refresh_from_db()
+        files = list((_TMP / "avatars").glob(f"{a.pk}*"))
+        self.assertEqual(len(files), 1)
+        self.assertFalse(first.exists() and first != Path(a.model_file.path))
+
+    def test_model_not_available_until_ready(self):
+        a = self.make()
+        self.assertEqual(self.client.get(reverse("avatar-model", args=[a.pk])).status_code, 404)
+
+    def test_concurrent_generation_is_refused_but_stale_jobs_can_restart(self):
+        a = self.make()
+        Avatar.objects.filter(pk=a.pk).update(status="processing", processing_started_at=timezone.now())
+        self.assertEqual(self.generate(a).status_code, 409)
+        Avatar.objects.filter(pk=a.pk).update(processing_started_at=timezone.now() - timezone.timedelta(minutes=10))
+        self.assertEqual(self.generate(a).status_code, 202)
+        self.assertEqual(self.status(a)["status"], "ready")
+
+    def test_failure_is_reported_and_retry_works(self):
+        a = self.make()
+        with mock.patch("avatars.services.generator.compute_morph_params", side_effect=RuntimeError("boom")), \
+                self.assertLogs("avatars.services.generator", level="ERROR"):
+            self.generate(a)
+        st = self.status(a)
+        self.assertEqual((st["status"], st["stage"]), ("failed", "failed"))
+        self.assertIn("boom", st["error"])
+        self.generate(a)
+        self.assertEqual(self.status(a)["status"], "ready")
+        self.assertEqual(self.status(a)["error"], "")
+
+    def test_generation_endpoints_are_private(self):
+        theirs = self.make(user=self.other, gender="male")
+        self.assertEqual(self.generate(theirs).status_code, 404)
+        self.assertEqual(self.client.get(reverse("avatar-generation-status", args=[theirs.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("avatar-model", args=[theirs.pk])).status_code, 404)
+
+    def test_requires_login(self):
+        a = self.make()
+        self.client.force_authenticate(None)
+        self.assertEqual(self.generate(a).status_code, 401)
+
+    def test_model_file_is_deleted_with_the_avatar(self):
+        a = self.make()
+        self.generate(a)
+        a.refresh_from_db()
+        path = Path(a.model_file.path)
+        self.assertTrue(path.exists())
+        self.client.delete(reverse("avatar-detail", args=[a.pk]))
+        self.assertFalse(path.exists())
+
+    def test_generation_is_rate_limited(self):
+        a = self.make()
+        codes = [self.generate(a).status_code for _ in range(12)]
+        self.assertIn(429, codes)
