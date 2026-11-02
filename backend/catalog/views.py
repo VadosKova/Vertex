@@ -27,3 +27,15 @@ def resolve_avatar(request):
 def visible_products(user):
     return (Product.objects.filter(Q(owner__isnull=True) | Q(owner=user))
             .select_related("brand", "category").prefetch_related("sizes"))
+
+
+class CategoryListView(generics.ListAPIView):
+    queryset = Category.objects.all().order_by("id")
+    serializer_class = CategorySerializer
+    pagination_class = None
+
+
+class CatalogPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 50
