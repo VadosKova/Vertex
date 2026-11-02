@@ -53,3 +53,19 @@ def build_verdict(label, zones, lang="uk"):
     lead = f"Розмір {label} сидить ідеально " if lang == "uk" else f"Size {label} fits perfectly "
     but = ", але " if lang == "uk" else ", but "
     return lead + joiner.join(perfect) + but + ", ".join(issues) + "."
+
+
+def evaluate_size(size, measurements, stretch, lang="uk"):
+    zones = []
+    for zone, key in ZONES.items():
+        rng = size.range(zone)
+        value = measurements.get(key)
+        if rng is None or value is None:
+            continue
+        zones.append(evaluate_zone(zone, value, rng[0], rng[1], stretch))
+    score = sum(WEIGHTS[z["zone"]] * z["penalty"] for z in zones)
+    fits = bool(zones) and all(z["status"] != "tight" for z in zones) and not any(
+        z["status"] == "loose" and z["delta_cm"] > LOOSE_LIMIT_CM for z in zones)
+    public = [{k: v for k, v in z.items() if k != "penalty"} | {"color": COLORS[z["status"]]} for z in zones]
+    return {"label": size.label, "order": size.order, "score": round(score, 2), "fits": fits,
+            "zones": public, "verdict": build_verdict(size.label, public, lang)}
