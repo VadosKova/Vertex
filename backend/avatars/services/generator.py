@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
 from django.core.files.base import ContentFile
-from django.db import close_old_connections
+from django.db import connection
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
@@ -12,7 +12,6 @@ from .glb import build_placeholder_glb
 
 log = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2)
-
 
 REFERENCE = {
     "male": {"chest": 0.55, "waist": 0.46, "hips": 0.55, "shoulders": 0.259},
@@ -43,7 +42,6 @@ def _progress(avatar, stage, pct):
 
 
 def run_generation(avatar_id):
-    close_old_connections()
     try:
         avatar = Avatar.objects.get(pk=avatar_id)
         _progress(avatar, "face_analysis", 25)
@@ -72,8 +70,13 @@ def run_generation(avatar_id):
     except Exception as exc:  # noqa: BLE001
         log.exception("Avatar generation failed")
         Avatar.objects.filter(pk=avatar_id).update(status=Avatar.Status.FAILED, stage="failed", error=str(exc)[:200])
+
+
+def _run_in_worker(avatar_id):
+    try:
+        run_generation(avatar_id)
     finally:
-        close_old_connections()
+        connection.close()
 
 
 STALE_AFTER = timezone.timedelta(minutes=5)
@@ -91,4 +94,4 @@ def start_generation(avatar: Avatar):
     if getattr(settings, "AVATAR_GENERATION_EAGER", False):
         run_generation(avatar.pk)
     else:
-        _executor.submit(run_generation, avatar.pk)
+        _executor.submit(_run_in_worker, avatar.pk)
