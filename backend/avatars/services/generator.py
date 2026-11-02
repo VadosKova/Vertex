@@ -77,3 +77,18 @@ def run_generation(avatar_id):
 
 
 STALE_AFTER = timezone.timedelta(minutes=5)
+
+
+def is_busy(avatar: Avatar) -> bool:
+    return (avatar.status == Avatar.Status.PROCESSING and avatar.processing_started_at is not None
+            and timezone.now() - avatar.processing_started_at < STALE_AFTER)
+
+
+def start_generation(avatar: Avatar):
+    Avatar.objects.filter(pk=avatar.pk).update(
+        status=Avatar.Status.PROCESSING, stage="validating", progress=5, error="",
+        processing_started_at=timezone.now())
+    if getattr(settings, "AVATAR_GENERATION_EAGER", False):
+        run_generation(avatar.pk)
+    else:
+        _executor.submit(run_generation, avatar.pk)
