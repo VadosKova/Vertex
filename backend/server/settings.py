@@ -42,7 +42,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.ScopedRateThrottle'],
-    'DEFAULT_THROTTLE_RATES': {'auth': '30/min'},
+    'DEFAULT_THROTTLE_RATES': {'auth': '30/min', 'generate': '10/min'},
 }
 
 SIMPLE_JWT = {
