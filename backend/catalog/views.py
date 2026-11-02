@@ -39,3 +39,34 @@ class CatalogPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
     max_page_size = 50
+
+
+class ProductListView(generics.ListAPIView):
+    serializer_class = ProductSerializer
+    pagination_class = CatalogPagination
+
+    def _avatar(self):
+        if not hasattr(self, "_cached_avatar"):
+            self._cached_avatar = resolve_avatar(self.request)
+        return self._cached_avatar
+
+    def get_queryset(self):
+        p = self.request.query_params
+        qs = visible_products(self.request.user)
+        if p.get("category"):
+            qs = qs.filter(category__slug=p["category"])
+        if p.get("brand"):
+            qs = qs.filter(brand__name__iexact=p["brand"])
+        if p.get("q"):
+            qs = qs.filter(Q(title__icontains=p["q"]) | Q(brand__name__icontains=p["q"]))
+        avatar = self._avatar()
+        if avatar and p.get("personalized", "true").lower() != "false":
+            qs = qs.filter(gender__in=[avatar.gender, "unisex"])
+            qs = fitting_products(qs, avatar.full_measurements()[0])
+        return qs
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        avatar = self._avatar()
+        ctx["measurements"] = avatar.full_measurements()[0] if avatar else None
+        return ctx
