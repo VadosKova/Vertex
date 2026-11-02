@@ -65,3 +65,16 @@ def fetch_html(url: str) -> str:
 
 _RANGE = re.compile(r"(\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)")
 _NUM = re.compile(r"(\d+(?:[.,]\d+)?)")
+
+
+def parse_range(text: str, inches=False):
+    f = 2.54 if inches else 1.0
+    m = _RANGE.search(text)
+    if m:
+        a, b = (float(x.replace(",", ".")) * f for x in m.groups())
+        return (min(a, b), max(a, b))
+    m = _NUM.search(text)
+    if m:  # single number -> ±2 cm tolerance
+        v = float(m.group(1).replace(",", ".")) * f
+        return (v - 2, v + 2)
+    return None
