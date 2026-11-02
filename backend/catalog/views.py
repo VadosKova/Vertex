@@ -22,3 +22,8 @@ def resolve_avatar(request):
         except (ValueError, DjangoValidationError):
             return None
     return qs.filter(is_default=True).first()
+
+
+def visible_products(user):
+    return (Product.objects.filter(Q(owner__isnull=True) | Q(owner=user))
+            .select_related("brand", "category").prefetch_related("sizes"))
