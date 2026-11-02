@@ -41,3 +41,27 @@ def assert_public_url(url: str):
     for info in infos:
         if not ipaddress.ip_address(info[4][0]).is_global:
             raise PageImportError("forbidden_host", "URL points to a non-public address.")
+
+
+def fetch_html(url: str) -> str:
+    headers = {"User-Agent": "VertexBot/1.0 (+size-chart-import)"}
+    for _ in range(4):
+        assert_public_url(url)
+        try:
+            resp = requests.get(url, headers=headers, timeout=(3, 8), stream=True, allow_redirects=False)
+        except requests.RequestException:
+            raise PageImportError("fetch_failed", "Could not download the page.")
+        if resp.is_redirect and resp.headers.get("Location"):
+            url = urljoin(url, resp.headers["Location"])
+            continue
+        if resp.status_code >= 400:
+            raise PageImportError("fetch_failed", f"Remote site answered {resp.status_code}.")
+        body = resp.raw.read(settings.IMPORT_MAX_BYTES + 1, decode_content=True)
+        if len(body) > settings.IMPORT_MAX_BYTES:
+            raise PageImportError("too_large", "Page is too large.")
+        return body.decode(resp.encoding or "utf-8", errors="replace")
+    raise PageImportError("too_many_redirects", "Too many redirects.")
+
+
+_RANGE = re.compile(r"(\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)")
+_NUM = re.compile(r"(\d+(?:[.,]\d+)?)")
