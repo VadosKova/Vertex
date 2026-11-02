@@ -69,3 +69,16 @@ def evaluate_size(size, measurements, stretch, lang="uk"):
     public = [{k: v for k, v in z.items() if k != "penalty"} | {"color": COLORS[z["status"]]} for z in zones]
     return {"label": size.label, "order": size.order, "score": round(score, 2), "fits": fits,
             "zones": public, "verdict": build_verdict(size.label, public, lang)}
+
+
+def evaluate_product(product, measurements, lang="uk"):
+    sizes = list(product.sizes.all())
+    results = [evaluate_size(s, measurements, product.fabric_stretch, lang) for s in sizes]
+    return [r for r in results if r["zones"]]
+
+
+def recommend_size(product, measurements, lang="uk"):
+    results = evaluate_product(product, measurements, lang)
+    if not results:
+        return None
+    return min(results, key=lambda r: (r["score"], -r["order"]))
