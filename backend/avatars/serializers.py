@@ -15,15 +15,24 @@ class AvatarSerializer(serializers.ModelSerializer):
     name = serializers.CharField(max_length=60, required=False)
     gender = serializers.ChoiceField(choices=Avatar.Gender.choices, required=False)
     estimated_fields = serializers.SerializerMethodField()
+    model_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Avatar
         fields = ("id", "name", "gender", "age", "height_cm", "weight_kg", "body_type", "measurements",
-                  "estimated_fields", "measurements_updated_at", "is_default", "photos", "created_at")
-        read_only_fields = ("id", "measurements_updated_at", "is_default", "created_at")
+                  "estimated_fields", "measurements_updated_at", "is_default", "status", "stage", "progress",
+                  "needs_regeneration", "error", "morph_params", "photos", "model_url", "created_at")
+        read_only_fields = ("id", "measurements_updated_at", "is_default", "status", "stage", "progress",
+                            "needs_regeneration", "error", "morph_params", "created_at")
 
     def get_estimated_fields(self, obj):
         return obj.full_measurements()[1]
+
+    def get_model_url(self, obj):
+        request = self.context.get("request")
+        if obj.status != Avatar.Status.READY or not request:
+            return None
+        return request.build_absolute_uri(f"/api/v1/avatars/{obj.pk}/model/")
 
     def validate_name(self, value):
         value = " ".join(value.split())
