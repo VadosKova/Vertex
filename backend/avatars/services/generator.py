@@ -40,3 +40,40 @@ def compute_morph_params(avatar: Avatar) -> dict:
 
 def _progress(avatar, stage, pct):
     Avatar.objects.filter(pk=avatar.pk).update(stage=stage, progress=pct)
+
+
+def run_generation(avatar_id):
+    close_old_connections()
+    try:
+        avatar = Avatar.objects.get(pk=avatar_id)
+        _progress(avatar, "face_analysis", 25)
+        face_data = {}
+        photo = avatar.photos.first()
+        if photo:
+            analyzer = import_string(getattr(settings, "AVATAR_FACE_ANALYZER", "avatars.services.face.BasicFaceAnalyzer"))()
+            with photo.file.open("rb") as fh:
+                face_data = analyzer.analyze(fh.read())
+        _progress(avatar, "morphing", 55)
+        params = compute_morph_params(avatar)
+        full, _ = avatar.full_measurements()
+        _progress(avatar, "exporting", 85)
+        glb = build_placeholder_glb(
+            avatar.height_cm / 100,
+            full["shoulder_width"] / 100 * 1.6,
+            full["chest_circumference"] / 100 / 3.14 * 1.2,
+            extras={"morph": params, "skin_rgb": face_data.get("skin_rgb")},
+        )
+        if avatar.model_file:
+            avatar.model_file.delete(save=False)
+        avatar.model_file.save(f"{avatar.pk}.glb", ContentFile(glb), save=False)
+        Avatar.objects.filter(pk=avatar.pk).update(
+            model_file=avatar.model_file.name, morph_params=params, face_data=face_data,
+            status=Avatar.Status.READY, stage="done", progress=100, needs_regeneration=False, error="")
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Avatar generation failed")
+        Avatar.objects.filter(pk=avatar_id).update(status=Avatar.Status.FAILED, stage="failed", error=str(exc)[:200])
+    finally:
+        close_old_connections()
+
+
+STALE_AFTER = timezone.timedelta(minutes=5)
