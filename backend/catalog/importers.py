@@ -134,3 +134,25 @@ def _parse_size_table(soup):
         if sizes:
             return sizes
     return []
+
+
+def parse_product_page(html: str) -> dict:
+    soup = BeautifulSoup(html, "html.parser")
+    ld = _find_product_jsonld(soup) or {}
+    title = ld.get("name") or (soup.find("meta", property="og:title") or {}).get("content") \
+        or (soup.title.string.strip() if soup.title and soup.title.string else "")
+    brand = ld.get("brand")
+    brand = brand.get("name") if isinstance(brand, dict) else brand
+    image = ld.get("image") or (soup.find("meta", property="og:image") or {}).get("content", "")
+    if isinstance(image, list):
+        image = image[0] if image else ""
+    return {"title": (title or "").strip()[:200], "brand": (brand or "Unknown").strip()[:80],
+            "image_url": image if isinstance(image, str) else "", "sizes": _parse_size_table(soup)}
+
+
+def guess_category_slug(title: str):
+    low = title.lower()
+    for slug, words in CATEGORY_KEYWORDS.items():
+        if any(w in low for w in words):
+            return slug
+    return None
