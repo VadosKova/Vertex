@@ -59,3 +59,32 @@ class Product(models.Model):
 
     def __str__(self):
         return f"{self.brand} {self.title}"
+
+
+class ProductSize(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="sizes")
+    label = models.CharField(max_length=10)
+    order = models.PositiveSmallIntegerField(default=0)
+    chest_min = models.FloatField(null=True, blank=True)
+    chest_max = models.FloatField(null=True, blank=True)
+    waist_min = models.FloatField(null=True, blank=True)
+    waist_max = models.FloatField(null=True, blank=True)
+    hips_min = models.FloatField(null=True, blank=True)
+    hips_max = models.FloatField(null=True, blank=True)
+    shoulders_min = models.FloatField(null=True, blank=True)
+    shoulders_max = models.FloatField(null=True, blank=True)
+    inseam_min = models.FloatField(null=True, blank=True)
+    inseam_max = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["product_id", "order"]
+        constraints = [models.UniqueConstraint(fields=["product", "label"], name="unique_size_per_product")]
+        indexes = [models.Index(fields=["chest_min", "chest_max"]), models.Index(fields=["waist_min", "waist_max"]),
+                   models.Index(fields=["hips_min", "hips_max"])]
+
+    def range(self, zone):
+        lo, hi = getattr(self, f"{zone}_min"), getattr(self, f"{zone}_max")
+        return None if lo is None or hi is None else (lo, hi)
+
+    def __str__(self):
+        return f"{self.product_id}:{self.label}"
