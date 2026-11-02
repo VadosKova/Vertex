@@ -70,3 +70,16 @@ class ProductListView(generics.ListAPIView):
         avatar = self._avatar()
         ctx["measurements"] = avatar.full_measurements()[0] if avatar else None
         return ctx
+
+
+class ProductDetailView(generics.RetrieveAPIView):
+    serializer_class = ProductSerializer
+
+    def get_queryset(self):
+        return visible_products(self.request.user)
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        avatar = resolve_avatar(self.request)
+        ctx["measurements"] = avatar.full_measurements()[0] if avatar else None
+        return ctx
