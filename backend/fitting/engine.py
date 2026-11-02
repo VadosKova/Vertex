@@ -26,3 +26,30 @@ def evaluate_zone(zone, value, lo, hi, stretch):
         return {"zone": zone, "status": "perfect", "delta_cm": 0.0, "intensity": 0.0, "penalty": 0.0}
     return {"zone": zone, "status": "loose", "delta_cm": round(slack, 1),
             "intensity": round(min(1.0, slack / LOOSE_LIMIT_CM), 2), "penalty": slack}
+
+
+def _cm(x):
+    return max(1, int(x + 0.5))
+
+
+def build_verdict(label, zones, lang="uk"):
+    lang = lang if lang in LOCATIVE else "uk"
+    loc = LOCATIVE[lang]
+    perfect = [loc[z["zone"]] for z in zones if z["status"] == "perfect"]
+    issues = []
+    for z in zones:
+        if z["status"] == "loose":
+            issues.append(f"{loc[z['zone']]} є запас {_cm(z['delta_cm'])} см" if lang == "uk"
+                          else f"there is {_cm(z['delta_cm'])} cm of extra room {loc[z['zone']]}")
+        elif z["status"] == "tight":
+            issues.append(f"{loc[z['zone']]} тисне (бракує {_cm(z['delta_cm'])} см)" if lang == "uk"
+                          else f"it is tight {loc[z['zone']]} (short by {_cm(z['delta_cm'])} cm)")
+    if not issues:
+        return (f"Розмір {label} сидить ідеально по всіх зонах." if lang == "uk"
+                else f"Size {label} fits perfectly in all zones.")
+    if not perfect:
+        return f"Розмір {label}: " + ", ".join(issues) + "." if lang == "uk" else f"Size {label}: " + ", ".join(issues) + "."
+    joiner = " і " if lang == "uk" else " and "
+    lead = f"Розмір {label} сидить ідеально " if lang == "uk" else f"Size {label} fits perfectly "
+    but = ", але " if lang == "uk" else ", but "
+    return lead + joiner.join(perfect) + but + ", ".join(issues) + "."
