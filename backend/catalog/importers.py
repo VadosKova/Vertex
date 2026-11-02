@@ -74,7 +74,31 @@ def parse_range(text: str, inches=False):
         a, b = (float(x.replace(",", ".")) * f for x in m.groups())
         return (min(a, b), max(a, b))
     m = _NUM.search(text)
-    if m:  # single number -> ±2 cm tolerance
+    if m:
         v = float(m.group(1).replace(",", ".")) * f
         return (v - 2, v + 2)
+    return None
+
+
+def _find_product_jsonld(soup):
+    def walk(node):
+        if isinstance(node, list):
+            for n in node:
+                found = walk(n)
+                if found:
+                    return found
+        elif isinstance(node, dict):
+            t = node.get("@type")
+            if t == "Product" or (isinstance(t, list) and "Product" in t):
+                return node
+            return walk(node.get("@graph", []))
+        return None
+
+    for tag in soup.find_all("script", type="application/ld+json"):
+        try:
+            found = walk(json.loads(tag.string or ""))
+        except (ValueError, TypeError):
+            continue
+        if found:
+            return found
     return None
