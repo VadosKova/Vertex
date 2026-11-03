@@ -62,3 +62,16 @@ def serialize_session(session, lang):
                       "size": item.size_label, "visible": item.visible, "layer": item.layer,
                       "garment_model_url": item.product.garment_model_url, "fit": evaluation})
     return {"id": str(session.pk), "avatar_id": str(session.avatar_id), "items": items}
+
+
+class SessionListCreateView(APIView):
+    def get(self, request):
+        sessions = TryOnSession.objects.filter(user=request.user)[:20]
+        return Response([{"id": str(x.pk), "avatar_id": str(x.avatar_id), "created_at": x.created_at} for x in sessions])
+
+    def post(self, request):
+        ser = s.SessionCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        avatar = _avatar_for(request, ser.validated_data.get("avatar_id"))
+        session = TryOnSession.objects.create(user=request.user, avatar=avatar)
+        return Response(serialize_session(session, _lang(request)), status=status.HTTP_201_CREATED)
