@@ -31,3 +31,22 @@ def _evaluate(product, avatar, size, lang):
             return None, Response({"size": ["Unknown size for this product."]}, status=400)
         return evaluate_size(match, measurements, product.fabric_stretch, lang), None
     return recommend_size(product, measurements, lang), None
+
+
+class EvaluateView(APIView):
+    def post(self, request):
+        ser = s.EvaluateRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        avatar = _avatar_for(request, d.get("avatar_id"))
+        product = get_object_or_404(visible_products(request.user), pk=d["product_id"])
+        lang = _lang(request, d.get("lang"))
+        result, err = _evaluate(product, avatar, d.get("size"), lang)
+        if err:
+            return err
+        if result is None:
+            return Response({"detail": "Product has no size chart."}, status=422)
+        all_sizes = [{"label": r["label"], "score": r["score"], "fits": r["fits"]}
+                     for r in evaluate_product(product, avatar.full_measurements()[0], lang)]
+        return Response({"product_id": product.pk, "avatar_id": str(avatar.pk), "estimated_fields":
+                         avatar.full_measurements()[1], "result": result, "sizes": all_sizes})
