@@ -17,3 +17,11 @@ class SessionCreateSerializer(serializers.Serializer):
 class ItemCreateSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     size = serializers.CharField(required=False, max_length=10)
+
+
+class ItemUpdateSerializer(serializers.ModelSerializer):
+    size_label = serializers.CharField(required=False, max_length=10)
+
+    class Meta:
+        model = TryOnItem
+        fields = ("visible", "size_label", "layer")
