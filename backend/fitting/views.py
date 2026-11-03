@@ -75,3 +75,13 @@ class SessionListCreateView(APIView):
         avatar = _avatar_for(request, ser.validated_data.get("avatar_id"))
         session = TryOnSession.objects.create(user=request.user, avatar=avatar)
         return Response(serialize_session(session, _lang(request)), status=status.HTTP_201_CREATED)
+
+
+class SessionDetailView(APIView):
+    def get(self, request, pk):
+        session = get_object_or_404(TryOnSession.objects.select_related("avatar"), pk=pk, user=request.user)
+        return Response(serialize_session(session, _lang(request)))
+
+    def delete(self, request, pk):
+        get_object_or_404(TryOnSession, pk=pk, user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
