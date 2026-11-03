@@ -9,18 +9,18 @@ from bs4 import BeautifulSoup
 from django.conf import settings
 
 MEASURE_SYNONYMS = {
-    "chest": ("chest", "bust", "груди"),
-    "waist": ("waist", "талія"),
-    "hips": ("hip", "стегна", "сідн"),
-    "shoulders": ("shoulder", "плечі"),
+    "chest": ("chest", "bust", "груд"),
+    "waist": ("waist", "тал"),
+    "hips": ("hip", "стег", "сідн"),
+    "shoulders": ("shoulder", "плеч"),
     "inseam": ("inseam", "внутріш", "довжина ноги"),
 }
 SIZE_HEADERS = ("size", "розмір")
 CATEGORY_KEYWORDS = {
-    "tshirts": ("t-shirt", "tee", "футболка"),
+    "tshirts": ("t-shirt", "tee", "футболк"),
     "hoodies": ("hoodie", "sweatshirt", "худі", "світшот"),
-    "jeans": ("jeans", "denim", "джинси"),
-    "dresses": ("dress", "сукня", "плаття"),
+    "jeans": ("jeans", "denim", "джинс"),
+    "dresses": ("dress", "сукн", "плат"),
 }
 
 
