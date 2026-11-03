@@ -105,3 +105,23 @@ class SessionItemsView(APIView):
             return Response({"detail": f"At most {MAX_ITEMS_PER_SESSION} items per session."}, status=400)
         TryOnItem.objects.create(session=session, product=product, size_label=result["label"], layer=layer)
         return Response(serialize_session(session, _lang(request)), status=status.HTTP_201_CREATED)
+
+
+class SessionItemDetailView(APIView):
+    def _item(self, request, pk, item_id):
+        return get_object_or_404(TryOnItem.objects.select_related("session__avatar", "product"),
+                                 pk=item_id, session_id=pk, session__user=request.user)
+
+    def patch(self, request, pk, item_id):
+        item = self._item(request, pk, item_id)
+        ser = s.ItemUpdateSerializer(item, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        size = ser.validated_data.get("size_label")
+        if size and not item.product.sizes.filter(label__iexact=size).exists():
+            return Response({"size_label": ["Unknown size for this product."]}, status=400)
+        ser.save()
+        return Response(serialize_session(item.session, _lang(request)))
+
+    def delete(self, request, pk, item_id):
+        self._item(request, pk, item_id).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
