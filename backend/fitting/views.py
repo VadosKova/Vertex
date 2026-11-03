@@ -50,3 +50,15 @@ class EvaluateView(APIView):
                      for r in evaluate_product(product, avatar.full_measurements()[0], lang)]
         return Response({"product_id": product.pk, "avatar_id": str(avatar.pk), "estimated_fields":
                          avatar.full_measurements()[1], "result": result, "sizes": all_sizes})
+
+
+def serialize_session(session, lang):
+    measurements = session.avatar.full_measurements()[0]
+    items = []
+    for item in session.items.select_related("product").prefetch_related("product__sizes"):
+        size = next((x for x in item.product.sizes.all() if x.label == item.size_label), None)
+        evaluation = evaluate_size(size, measurements, item.product.fabric_stretch, lang) if size else None
+        items.append({"id": item.pk, "product_id": item.product_id, "title": item.product.title,
+                      "size": item.size_label, "visible": item.visible, "layer": item.layer,
+                      "garment_model_url": item.product.garment_model_url, "fit": evaluation})
+    return {"id": str(session.pk), "avatar_id": str(session.avatar_id), "items": items}
