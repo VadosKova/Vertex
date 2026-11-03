@@ -34,7 +34,7 @@ class CatalogBase(APITestCase):
         base.update(over)
         return Avatar.objects.create(**base)
 
-    def make_product(self, owner=None, stretch=0.03, gender="unisex", title="Tee", chart=None, slug="t-shirts"):
+    def make_product(self, owner=None, stretch=0.03, gender="unisex", title="Tee", chart=None, slug="tshirts"):
         cat, _ = Category.objects.get_or_create(slug=slug, defaults={"name_uk": slug, "name_en": slug})
         brand, _ = Brand.objects.get_or_create(name="Brandy")
         p = Product.objects.create(brand=brand, category=cat, title=title, gender=gender, owner=owner,
@@ -188,7 +188,7 @@ class CatalogListTests(CatalogBase):
     def test_category_search_and_brand_filters(self):
         self.assertEqual(self.titles(category="hoodies"), {"Fits Hoodie"})
         self.assertEqual(self.titles(q="hoodie"), {"Fits Hoodie"})
-        self.assertEqual(self.titles(brand="brandy", category="t-shirts"), {"Fits Tee", "My import"})
+        self.assertEqual(self.titles(brand="brandy", category="tshirts"), {"Fits Tee", "My import"})
 
     def test_card_has_brand_and_recommended_size(self):
         card = self.client.get(reverse("products"), {"category": "hoodies"}).data["results"][0]
@@ -221,7 +221,7 @@ class CatalogListTests(CatalogBase):
 
     def test_categories_and_detail(self):
         r = self.client.get(reverse("categories"))
-        self.assertEqual({c["slug"] for c in r.data}, {"t-shirts", "hoodies"})
+        self.assertEqual({c["slug"] for c in r.data}, {"tshirts", "hoodies"})
         d = self.client.get(reverse("product-detail", args=[self.fits.pk]))
         self.assertEqual(list(d.data["sizes"][0]["ranges"]["chest"]), [88.0, 92.0])
 

@@ -32,7 +32,7 @@ class ZoneRuleTests(SimpleTestCase):
 class RecommendationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cat = Category.objects.create(slug="t-shirts", name_uk="Футболки", name_en="T-shirts")
+        cat = Category.objects.create(slug="tshirts", name_uk="Футболки", name_en="T-shirts")
         brand = Brand.objects.create(name="Brandy")
         cls.product = cls.make(cat, brand, "Tee", 0.03,
                                {"S": ((88, 92), (74, 78), (92, 96)), "M": ((92, 100), (78, 86), (96, 102)),
