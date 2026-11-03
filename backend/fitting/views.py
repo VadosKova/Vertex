@@ -85,3 +85,23 @@ class SessionDetailView(APIView):
     def delete(self, request, pk):
         get_object_or_404(TryOnSession, pk=pk, user=request.user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SessionItemsView(APIView):
+    def post(self, request, pk):
+        session = get_object_or_404(TryOnSession.objects.select_related("avatar"), pk=pk, user=request.user)
+        ser = s.ItemCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        product = get_object_or_404(visible_products(request.user), pk=ser.validated_data["product_id"])
+        result, err = _evaluate(product, session.avatar, ser.validated_data.get("size"), "uk")
+        if err:
+            return err
+        if result is None:
+            return Response({"detail": "Product has no size chart."}, status=422)
+        if session.items.filter(product=product).exists():
+            return Response({"detail": "This item is already on the avatar."}, status=status.HTTP_409_CONFLICT)
+        layer = session.items.count()
+        if layer >= MAX_ITEMS_PER_SESSION:
+            return Response({"detail": f"At most {MAX_ITEMS_PER_SESSION} items per session."}, status=400)
+        TryOnItem.objects.create(session=session, product=product, size_label=result["label"], layer=layer)
+        return Response(serialize_session(session, _lang(request)), status=status.HTTP_201_CREATED)
