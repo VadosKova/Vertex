@@ -35,10 +35,10 @@ class RecommendationTests(TestCase):
         cat = Category.objects.create(slug="tshirts", name_uk="Футболки", name_en="T-shirts")
         brand = Brand.objects.create(name="Brandy")
         cls.product = cls.make(cat, brand, "Tee", 0.03,
-                               {"S": ((88, 92), (74, 78), (92, 96)), "M": ((92, 100), (78, 86), (96, 102)),
-                                "L": ((100, 108), (86, 94), (102, 110))})
+                               {"S": ((88, 92), (74, 78), (92, 96)), "M": ((92, 100), (78, 86), (96, 102)), "L": ((100, 108), (86, 94), (102, 110))})
         cls.stiff = cls.make(cat, brand, "Stiff", 0.0, {"L": ((100, 108), (86, 94), (102, 110))})
         cls.stretchy = cls.make(cat, brand, "Stretchy", 0.06, {"L": ((100, 108), (86, 94), (102, 110))})
+        cls.tie = cls.make(cat, brand, "Tie", 0.03, {"M": ((90, 100), (78, 86), (96, 102)), "L": ((92, 102), (78, 86), (96, 102))})
 
     @staticmethod
     def make(cat, brand, title, stretch, chart):
@@ -80,5 +80,10 @@ class RecommendationTests(TestCase):
         z_stretchy = next(z for z in recommend_size(self.stretchy, m)["zones"] if z["zone"] == "chest")
         self.assertEqual((z_stiff["status"], z_stretchy["status"]), ("tight", "perfect"))
 
-    def test_ties_prefer_the_larger_size_and_missing_data_is_safe(self):
+    def test_ties_prefer_the_larger_size(self):
+        evals = {r["label"]: r["score"] for r in evaluate_product(self.tie, self.m())}
+        self.assertEqual(evals["M"], evals["L"])
+        self.assertEqual(recommend_size(self.tie, self.m())["label"], "L")
+
+    def test_missing_measurements_give_no_recommendation(self):
         self.assertIsNone(recommend_size(self.product, {}))
