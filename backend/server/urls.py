@@ -23,4 +23,5 @@ urlpatterns = [
     path('api/v1/', include('avatars.urls')),
     path('api/v1/', include('catalog.urls')),
     path('api/v1/', include('fitting.urls')),
+    path('api/v1/', include('notifications.urls')),
 ]

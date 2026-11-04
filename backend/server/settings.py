@@ -35,7 +35,8 @@ INSTALLED_APPS = [
     'accounts',
     'avatars',
     'catalog',
-    'fitting'
+    'fitting',
+    'notifications'
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
