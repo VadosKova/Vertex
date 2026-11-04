@@ -25,3 +25,20 @@ def users_due_for_reminder(now=None):
             .annotate(last_measured=Max("avatars__measurements_updated_at"))
             .filter(last_measured__lte=cutoff)
             .filter(Q(last_reminder_at__isnull=True) | Q(last_reminder_at__lte=cutoff)))
+
+
+def send_push(user, title, body):
+    return False
+
+
+def send_due_reminders(now=None):
+    now = now or timezone.now()
+    count = 0
+    for user in users_due_for_reminder(now):
+        title, body = TEXT.get(user.language, TEXT["uk"])
+        Notification.objects.create(user=user, kind=Notification.Kind.MEASUREMENT_REMINDER, title=title, body=body)
+        send_push(user, title, body)
+        user.last_reminder_at = now
+        user.save(update_fields=["last_reminder_at"])
+        count += 1
+    return count
