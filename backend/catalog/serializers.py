@@ -27,11 +27,15 @@ class ProductSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="category.slug")
     sizes = ProductSizeSerializer(many=True, read_only=True)
     recommended_size = serializers.SerializerMethodField()
+    approximate = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = ("id", "title", "brand", "category", "gender", "image_url", "garment_model_url",
-                  "source_url", "is_template", "sizes", "recommended_size")
+                  "source_url", "is_template", "size_chart_source", "approximate", "sizes", "recommended_size")
+
+    def get_approximate(self, obj):
+        return obj.size_chart_source == "default"
 
     def get_recommended_size(self, obj):
         measurements = self.context.get("measurements")
