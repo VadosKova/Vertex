@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from avatars.models import Avatar
 
+from .default_charts import default_chart
 from .filtering import fitting_products
 from .importers import PageImportError, fetch_html, guess_category_slug, parse_product_page
 from .models import Brand, Category, Product, ProductSize
@@ -100,22 +101,27 @@ class ProductImportView(APIView):
         except PageImportError as exc:
             return Response({"code": exc.code, "detail": str(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
-        if not parsed["sizes"]:
+        slug = ser.validated_data.get("category") or guess_category_slug(parsed["title"])
+        category = Category.objects.filter(slug=slug).first() if slug else None
+        gender = ser.validated_data.get("gender", "unisex")
+        sizes, source = parsed["sizes"], "brand"
+        if not sizes:
             for tpl in Product.objects.filter(is_template=True, brand__name__iexact=parsed["brand"]):
                 if tpl.title.lower() in parsed["title"].lower():
                     return Response(ProductSerializer(tpl).data)
-            return Response({"code": "size_chart_not_found",
-                             "detail": "Could not find a size chart on the page."},
-                            status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
-        slug = ser.validated_data.get("category") or guess_category_slug(parsed["title"])
-        category = Category.objects.filter(slug=slug).first() if slug else None
+            sizes = default_chart(slug, gender) if category else None
+            source = "default"
+            if sizes is None:
+                return Response({"code": "size_chart_not_found",
+                                 "detail": "Could not find a size chart on the page."},
+                                status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         if not category:
             return Response({"category": ["Could not detect the category; please pass one."]}, status=400)
         brand, _ = Brand.objects.get_or_create(name=parsed["brand"])
         product = Product.objects.create(
             brand=brand, category=category, title=parsed["title"], image_url=parsed["image_url"],
-            source_url=url, owner=request.user, gender=ser.validated_data.get("gender", "unisex"))
-        ProductSize.objects.bulk_create([ProductSize(product=product, **s) for s in parsed["sizes"]])
+            source_url=url, owner=request.user, gender=gender, size_chart_source=source)
+        ProductSize.objects.bulk_create([ProductSize(product=product, **s) for s in sizes])
         product = visible_products(request.user).get(pk=product.pk)
         return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
