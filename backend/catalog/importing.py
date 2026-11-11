@@ -170,3 +170,32 @@ def validate(data, known_categories):
             products.append({"brand": brand, "title": title, "category": category, "gender": gender,
                              "fabric_stretch": float(stretch), "sizes": entries, "size_chart_source": source, **urls})
     return products, errors
+
+
+def import_catalog(data, dry_run=False):
+    categories = {c.slug: c for c in Category.objects.all()}
+    products, errors = validate(data, set(categories))
+    if errors:
+        raise CatalogDataError(errors)
+    report = ImportReport()
+    with transaction.atomic():
+        for item in products:
+            brand = Brand.objects.filter(name__iexact=item["brand"]).first() or Brand.objects.create(name=item["brand"])
+            fields = {"category": categories[item["category"]], "gender": item["gender"],
+                      "fabric_stretch": item["fabric_stretch"], "image_url": item["image_url"],
+                      "garment_model_url": item["garment_model_url"], "source_url": item["source_url"],
+                      "size_chart_source": item["size_chart_source"], "is_template": True}
+            product = Product.objects.filter(brand=brand, title__iexact=item["title"], owner__isnull=True).first()
+            if product:
+                for key, value in fields.items():
+                    setattr(product, key, value)
+                product.save()
+                product.sizes.all().delete()
+                report.updated += 1
+            else:
+                product = Product.objects.create(brand=brand, title=item["title"], owner=None, **fields)
+                report.created += 1
+            ProductSize.objects.bulk_create([ProductSize(product=product, **e) for e in item["sizes"]])
+        if dry_run:
+            transaction.set_rollback(True)
+    return report
