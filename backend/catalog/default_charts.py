@@ -23,3 +23,15 @@ def _entries(chart, jeans=False):
             entry[f"{zone}_min"], entry[f"{zone}_max"] = float(lo), float(hi)
         out.append(entry)
     return out
+
+
+def default_chart(category_slug, gender):
+    family = FAMILY.get(category_slug)
+    if family is None:
+        return None
+    if family == "dresses":
+        return _entries(_DRESSES_FEMALE) if gender in ("female", "unisex") else None
+    male = gender in ("male", "unisex")
+    if family == "tops":
+        return _entries(_TOPS_MALE if male else _TOPS_FEMALE)
+    return _entries(_JEANS_MALE if male else _JEANS_FEMALE, jeans=True)
