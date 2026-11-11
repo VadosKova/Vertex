@@ -47,6 +47,8 @@ class Product(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE,
                               related_name="imported_products")
     is_template = models.BooleanField(default=False)
+    size_chart_source = models.CharField(max_length=7, choices=[("brand", "Brand chart"), ("default", "Generic chart")],
+                                         default="brand")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
