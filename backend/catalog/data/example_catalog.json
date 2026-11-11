@@ -1,0 +1,38 @@
+{
+  "_note": "EXAMPLE with fictional brands and made-up numbers - replace with real size charts. Sizes are BODY measurements in cm: [min, max] per zone (chest, waist, hips, shoulders, inseam). Lines starting with an underscore are ignored.",
+  "products": [
+    {
+      "brand": "Demo Basics",
+      "title": "Classic Tee",
+      "category": "tshirts",
+      "gender": "male",
+      "fabric_stretch": 0.05,
+      "image_url": "https://example.com/images/classic-tee.jpg",
+      "sizes": [
+        {"label": "S",  "chest": [88, 92],   "waist": [74, 78], "hips": [92, 96]},
+        {"label": "M",  "chest": [92, 100],  "waist": [78, 86], "hips": [96, 102]},
+        {"label": "L",  "chest": [100, 108], "waist": [86, 94], "hips": [102, 110]},
+        {"label": "XL", "chest": [108, 116], "waist": [94, 102], "hips": [110, 118]}
+      ]
+    },
+    {
+      "brand": "Demo Denim",
+      "title": "Slim Jeans",
+      "category": "jeans",
+      "gender": "male",
+      "fabric_stretch": 0.02,
+      "sizes": [
+        {"label": "30", "waist": [74, 79], "hips": [92, 97]},
+        {"label": "32", "waist": [79, 85], "hips": [97, 102]},
+        {"label": "34", "waist": [85, 91], "hips": [102, 108]}
+      ]
+    },
+    {
+      "brand": "Demo Studio",
+      "title": "Wrap Dress",
+      "category": "dresses",
+      "gender": "female",
+      "use_default_chart": true
+    }
+  ]
+}
