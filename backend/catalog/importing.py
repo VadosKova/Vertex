@@ -31,3 +31,19 @@ class ImportReport:
     @property
     def total(self):
         return self.created + self.updated
+
+
+def load_file(path):
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        raise CatalogDataError([f"File not found: {path}"])
+    except UnicodeDecodeError:
+        raise CatalogDataError(["The file must be saved as UTF-8."])
+    except json.JSONDecodeError as exc:
+        raise CatalogDataError([f"Invalid JSON: {exc.msg} (line {exc.lineno}, column {exc.colno})"])
+
+
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
