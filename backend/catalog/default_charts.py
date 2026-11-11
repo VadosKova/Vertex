@@ -12,3 +12,14 @@ _JEANS_MALE = {"28": ((70, 74), (88, 92)), "30": ((74, 79), (92, 97)),
                "32": ((79, 85), (97, 102)), "34": ((85, 91), (102, 108))}
 _JEANS_FEMALE = {"25": ((62, 66), (88, 92)), "26": ((66, 70), (92, 96)), "27": ((70, 74), (96, 100)),
                  "28": ((74, 78), (100, 104)), "29": ((78, 82), (104, 108)), "30": ((82, 86), (108, 112))}
+
+
+def _entries(chart, jeans=False):
+    out = []
+    for order, (label, ranges) in enumerate(chart.items()):
+        entry = {"label": label, "order": order}
+        zones = ("waist", "hips") if jeans else ("chest", "waist", "hips")
+        for zone, (lo, hi) in zip(zones, ranges):
+            entry[f"{zone}_min"], entry[f"{zone}_max"] = float(lo), float(hi)
+        out.append(entry)
+    return out
