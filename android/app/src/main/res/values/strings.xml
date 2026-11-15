@@ -1,3 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Vertex</string>
+    <string name="app_name" translatable="false">Vertex</string>
+
+    <string name="intro_title" translatable="false">VERTEX</string>
+    <string name="intro_subtitle" translatable="false">Virtual Try-On 3D</string>
+    <string name="intro_description">Створи свій цифровий двійник, приміряй одяг\nонлайн та купуй без ризиків повернення.</string>
+    <string name="intro_start">РОЗПОЧАТИ</string>
+    <string name="intro_have_account">Уже є акаунт?</string>
+    <string name="intro_login">Увійти</string>
+
+    <string name="theme_switch_to_dark">Увімкнути темну тему</string>
+    <string name="theme_switch_to_light">Увімкнути світлу тему</string>
+
+    <string name="placeholder_login">Екран входу (наступний етап)</string>
+    <string name="placeholder_register">Екран реєстрації (наступний етап)</string>
 </resources>

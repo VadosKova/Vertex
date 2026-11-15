@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intro_description">Create your digital twin, try on clothes online and shop without the risk of returns.</string>
+    <string name="intro_start">GET STARTED</string>
+    <string name="intro_have_account">Already have an account?</string>
+    <string name="intro_login">Log in</string>
+
+    <string name="theme_switch_to_dark">Switch to dark theme</string>
+    <string name="theme_switch_to_light">Switch to light theme</string>
+
+    <string name="placeholder_login">Login screen (next stage)</string>
+    <string name="placeholder_register">Register screen (next stage)</string>
+</resources>

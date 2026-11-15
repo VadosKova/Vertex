@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.Vertex" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
 
-    <style name="Theme.Vertex" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Vertex.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.Vertex</item>
+    </style>
 </resources>
