@@ -21,6 +21,7 @@ from .models import Brand, Category, Product, ProductSize
 EXAMPLE = Path(__file__).resolve().parent / "data" / "example_catalog.json"
 CATS = {"tshirts": ("Футболки", "T-shirts"), "hoodies": ("Худі", "Hoodies"),
         "jeans": ("Джинси", "Jeans"), "dresses": ("Сукні", "Dresses")}
+PLUS_LABELS = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL"]
 SIZES = [{"label": "S", "chest": [88, 92], "waist": [74, 78], "hips": [92, 96]},
          {"label": "M", "chest": [92, 100], "waist": [78, 86], "hips": [96, 102]}]
 
@@ -49,7 +50,7 @@ class FileImportTests(ImportBase):
         jeans = Product.objects.get(title="Slim Jeans")
         self.assertIsNone(jeans.sizes.get(label="32").chest_min)
         dress = Product.objects.get(title="Wrap Dress")
-        self.assertEqual((dress.size_chart_source, dress.sizes.count(), dress.gender), ("default", 4, "female"))
+        self.assertEqual((dress.size_chart_source, dress.sizes.count(), dress.gender), ("default", 10, "female"))
 
         user = User.objects.create_user("a@example.com", "S3cure-pass-word", username="A", gender="male")
         Avatar.objects.create(user=user, name="Me", gender="male", age=25, height_cm=180, weight_kg=75,
@@ -177,6 +178,43 @@ class DefaultChartTests(ImportBase):
                 lows = [e[f"{zone}_min"] for e in chart if f"{zone}_min" in e]
                 self.assertEqual(lows, sorted(lows), (cat, gender, zone))
 
+    def test_charts_have_no_gaps_and_cover_xs_to_6xl(self):
+        spans = {}
+        for cat in FAMILY:
+            for gender in ("male", "female"):
+                chart = default_chart(cat, gender)
+                if not chart:
+                    continue
+                for zone in ("chest", "waist", "hips"):
+                    rows = [(e[f"{zone}_min"], e[f"{zone}_max"]) for e in chart if f"{zone}_min" in e]
+                    for (lo1, hi1), (lo2, hi2) in zip(rows, rows[1:]):
+                        self.assertEqual(hi1, lo2, f"gap in {cat}/{gender}/{zone}: {hi1} -> {lo2}")
+                    if rows:
+                        spans[(cat, gender, zone)] = (rows[0][0], rows[-1][1])
+        self.assertEqual([e["label"] for e in default_chart("tshirts", "male")], PLUS_LABELS)
+        self.assertEqual([e["label"] for e in default_chart("hoodies", "female")], PLUS_LABELS)
+        self.assertEqual([e["label"] for e in default_chart("dresses", "female")], PLUS_LABELS)
+        self.assertEqual(spans[("tshirts", "male", "chest")], (82, 156))
+        self.assertEqual(spans[("tshirts", "female", "chest")], (80, 148))
+        self.assertEqual(spans[("jeans", "male", "waist")], (66, 127))
+        self.assertEqual(spans[("jeans", "female", "waist")], (58, 120))
+
+    def test_plus_size_bodies_get_a_fitting_size(self):
+        from fitting.engine import recommend_size
+        cases = [("tshirts", "male", 84, 70, 88, "XS"), ("tshirts", "male", 128, 114, 130, "3XL"),
+                 ("tshirts", "male", 152, 138, 154, "6XL"), ("tshirts", "female", 144, 126, 150, "6XL"),
+                 ("hoodies", "female", 120, 102, 126, "3XL"), ("jeans", "male", 112, 100, 120, "38"),
+                 ("jeans", "female", 100, 92, 126, "34"), ("dresses", "female", 112, 94, 118, "2XL")]
+        for cat, gender, chest, waist, hips, label in cases:
+            title = f"{cat}{gender}{chest}"
+            import_catalog({"products": [{"brand": "B", "title": title, "category": cat, "gender": gender,
+                                          "use_default_chart": True}]})
+            p = Product.objects.prefetch_related("sizes").get(title=title)
+            rec = recommend_size(p, {"chest_circumference": chest, "waist_circumference": waist,
+                                     "hip_circumference": hips})
+            self.assertTrue(rec["fits"], (cat, gender, chest, rec["label"], rec["verdict"]))
+            self.assertEqual(rec["label"], label, (cat, gender, chest))
+
     def test_unsupported_combinations_return_none(self):
         self.assertIsNone(default_chart("coats", "male"))
         self.assertIsNone(default_chart("dresses", "male"))
@@ -241,12 +279,12 @@ class UrlImportFallbackTests(ImportBase):
         r = self.post(category="hoodies", gender="female")
         self.assertEqual(r.status_code, 201, r.data)
         self.assertTrue(r.data["approximate"])
-        self.assertEqual([s["label"] for s in r.data["sizes"]], ["XS", "S", "M", "L", "XL"])
+        self.assertEqual([s["label"] for s in r.data["sizes"]], PLUS_LABELS)
 
     def test_category_can_be_guessed_from_the_title_and_unisex_uses_the_mens_chart(self):
         r = self.post()
         self.assertEqual((r.status_code, r.data["category"]), (201, "hoodies"))
-        self.assertEqual([s["label"] for s in r.data["sizes"]], ["S", "M", "L", "XL"])
+        self.assertEqual([s["label"] for s in r.data["sizes"]], PLUS_LABELS)
 
     def test_without_a_category_there_is_still_a_clear_error(self):
         page = PAGE_NO_TABLE.replace("Soft Hoodie", "Mystery Garment")
