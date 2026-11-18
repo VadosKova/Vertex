@@ -2,7 +2,7 @@
   "_note": "EXAMPLE with fictional brands and made-up numbers - replace with real size charts. Sizes are BODY measurements in cm: [min, max] per zone (chest, waist, hips, shoulders, inseam). Lines starting with an underscore are ignored.",
   "products": [
     {
-      "brand": "Demo Basics",
+      "brand": "Fruit of the Loom",
       "title": "Classic Tee",
       "category": "tshirts",
       "gender": "male",
