@@ -91,3 +91,34 @@ def request_code(email):
         subject, body = TEXT.get(user.language, TEXT["uk"])
         send_mail(subject, body.format(code=code, minutes=CODE_TTL // 60), settings.DEFAULT_FROM_EMAIL, [user.email])
     return {"email_masked": mask_email(email), "resend_after": RESEND_COOLDOWN, "expires_in": CODE_TTL}
+
+
+def verify_code(email, code):
+    user = User.objects.filter(email__iexact=normalize(email), is_active=True).first()
+    if user is None or not (isinstance(code, str) and len(code) == 6 and code.isdecimal()):
+        raise InvalidCode()
+    row = (user.reset_codes.filter(used_at__isnull=True, verified_at__isnull=True,
+                                   expires_at__gt=timezone.now()).order_by("-created_at").first())
+    if row is None or row.attempts >= MAX_ATTEMPTS:
+        raise InvalidCode()
+    if not hmac.compare_digest(row.code_hash, _hash(user.pk, code)):
+        row.attempts += 1
+        row.save(update_fields=["attempts"])
+        if row.attempts >= MAX_ATTEMPTS:
+            row.used_at = timezone.now()
+            row.save(update_fields=["used_at"])
+        raise InvalidCode()
+    row.verified_at = timezone.now()
+    row.save(update_fields=["verified_at"])
+    return signing.dumps({"u": user.pk, "c": row.pk}, salt=TOKEN_SALT)
+
+
+def consume_token(token):
+    try:
+        payload = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_TTL)
+        row = PasswordResetCode.objects.select_related("user").get(pk=payload["c"], user_id=payload["u"])
+    except (signing.BadSignature, PasswordResetCode.DoesNotExist, KeyError, TypeError):
+        raise InvalidToken()
+    if row.verified_at is None or row.used_at is not None or not row.user.is_active:
+        raise InvalidToken()
+    return row.user, row
