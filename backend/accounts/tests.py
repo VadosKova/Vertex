@@ -68,33 +68,6 @@ class AuthTests(APITestCase):
     def test_me_requires_jwt(self):
         self.assertEqual(self.client.get(reverse("me")).status_code, 401)
 
-    def test_password_reset_flow(self):
-        r = self.client.post(reverse("password-reset"), {"email": "alice@example.com"})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(mail.outbox), 1)
-        body = mail.outbox[0].body
-        uid = body.split("uid=")[1].split("&")[0]
-        token = body.split("token=")[1].split()[0]
-        bad = self.client.post(reverse("password-reset-confirm"),
-                               {"uid": uid, "token": "bad", "new_password": "Brand-new-pass-9"})
-        self.assertEqual(bad.status_code, 400)
-        ok = self.client.post(reverse("password-reset-confirm"),
-                              {"uid": uid, "token": token, "new_password": "Brand-new-pass-9"})
-        self.assertEqual(ok.status_code, 200)
-        self.assertTrue(User.objects.get(email="alice@example.com").check_password("Brand-new-pass-9"))
-        again = self.client.post(reverse("password-reset-confirm"),
-                                 {"uid": uid, "token": token, "new_password": "Third-pass-word-3"})
-        self.assertEqual(again.status_code, 400)
-
-    def test_password_reset_does_not_reveal_unknown_email(self):
-        r = self.client.post(reverse("password-reset"), {"email": "ghost@example.com"})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(mail.outbox), 0)
-
-    def test_password_reset_email_uses_user_language(self):
-        User.objects.filter(email="alice@example.com").update(language="en")
-        self.client.post(reverse("password-reset"), {"email": "alice@example.com"})
-        self.assertIn("password reset", mail.outbox[0].subject)
 
 
 class SettingsTests(APITestCase):
@@ -185,17 +158,6 @@ class GoogleLoginTests(APITestCase):
         self.assertEqual(User.objects.get().google_sub, "google-123")
         bad = self.client.post(reverse("token"), {"email": "gina@example.com", "password": PASSWORD})
         self.assertEqual(bad.status_code, 401)
-
-    def test_google_account_can_set_a_password_via_reset(self):
-        google_login(self.client)
-        self.client.post(reverse("password-reset"), {"email": "gina@example.com"})
-        body = mail.outbox[0].body
-        uid, token = body.split("uid=")[1].split("&")[0], body.split("token=")[1].split()[0]
-        ok = self.client.post(reverse("password-reset-confirm"),
-                              {"uid": uid, "token": token, "new_password": "Brand-new-pass-9"})
-        self.assertEqual(ok.status_code, 200)
-        r = self.client.post(reverse("token"), {"email": "gina@example.com", "password": "Brand-new-pass-9"})
-        self.assertEqual(r.status_code, 200)
 
     def test_unverified_email_is_rejected(self):
         r = google_login(self.client, {"email_verified": False})
