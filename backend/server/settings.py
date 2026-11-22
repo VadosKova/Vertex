@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'accounts',
     'avatars',
     'catalog',
@@ -62,7 +63,6 @@ MAX_PHOTO_BYTES = 8 * 1024 * 1024
 MAX_PHOTOS_PER_AVATAR = 3
 
 DEFAULT_FROM_EMAIL = 'Vertex <no-reply@vertex.app>'
-PASSWORD_RESET_LINK = 'vertex://reset-password?uid={uid}&token={token}'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
