@@ -122,3 +122,13 @@ def consume_token(token):
     if row.verified_at is None or row.used_at is not None or not row.user.is_active:
         raise InvalidToken()
     return row.user, row
+
+
+def finish(user, row):
+    row.used_at = timezone.now()
+    row.save(update_fields=["used_at"])
+    from django.apps import apps
+    if apps.is_installed("rest_framework_simplejwt.token_blacklist"):
+        from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+        for token in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=token)
