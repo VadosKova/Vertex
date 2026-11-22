@@ -1,25 +1,18 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from . import reset
 from . import serializers as s
+from .passwords import validate_password_strength
 from .google import GoogleNotConfigured, InvalidGoogleToken, sign_in_with_google, verify_google_token
 from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
-
-RESET_TEXT = {
-    "uk": ("Відновлення пароля Vertex", "Щоб встановити новий пароль, перейдіть за посиланням:\n{link}"),
-    "en": ("Vertex password reset", "To set a new password open this link:\n{link}"),
-}
-
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = s.RegisterSerializer
@@ -43,41 +36,70 @@ class MeView(generics.RetrieveUpdateDestroyAPIView):
         instance.delete()
 
 
-class PasswordResetRequestView(APIView):
+class _AuthFlowView(APIView):
     permission_classes = [permissions.AllowAny]
     authentication_classes: list = []
     throttle_scope = "auth"
 
+
+class PasswordResetRequestView(_AuthFlowView):
     def post(self, request):
         ser = s.PasswordResetRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        user = User.objects.filter(email__iexact=ser.validated_data["email"], is_active=True).first()
-        if user:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            link = settings.PASSWORD_RESET_LINK.format(uid=uid, token=token)
-            subject, body = RESET_TEXT.get(user.language, RESET_TEXT["uk"])
-            send_mail(subject, body.format(link=link), settings.DEFAULT_FROM_EMAIL, [user.email])
-        return Response({"detail": "If the account exists, an email has been sent."})
+        try:
+            data = reset.request_code(ser.validated_data["email"])
+        except reset.Throttled as exc:
+            resp = Response({"code": "too_many_requests", "detail": "Please wait before requesting a new code.",
+                             "retry_after": exc.wait}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            resp["Retry-After"] = str(exc.wait)
+            return resp
+        return Response({"detail": "If the account exists, a code has been sent.", **data})
 
 
-class PasswordResetConfirmView(APIView):
-    permission_classes = [permissions.AllowAny]
-    authentication_classes: list = []
-    throttle_scope = "auth"
+class PasswordResetVerifyView(_AuthFlowView):
+    def post(self, request):
+        ser = s.PasswordResetVerifySerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            token = reset.verify_code(ser.validated_data["email"], ser.validated_data["code"].strip())
+        except reset.InvalidCode:
+            return Response({"code": "invalid_code", "detail": "Invalid or expired code."}, status=400)
+        return Response({"reset_token": token, "expires_in": reset.TOKEN_TTL})
 
+
+class PasswordResetConfirmView(_AuthFlowView):
     def post(self, request):
         ser = s.PasswordResetConfirmSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         try:
-            user = User.objects.get(pk=urlsafe_base64_decode(ser.validated_data["uid"]).decode())
-        except (User.DoesNotExist, ValueError, TypeError, OverflowError, UnicodeDecodeError):
-            user = None
-        if user is None or not default_token_generator.check_token(user, ser.validated_data["token"]):
-            return Response({"detail": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST)
-        user.set_password(ser.validated_data["new_password"])
+            user, row = reset.consume_token(ser.validated_data["reset_token"])
+        except reset.InvalidToken:
+            return Response({"code": "invalid_token", "detail": "The reset session is invalid or has expired."},
+                            status=400)
+        new_password = ser.validated_data["new_password"]
+        try:
+            validate_password_strength(new_password, user)
+        except serializers.ValidationError as exc:
+            return Response({"new_password": exc.detail}, status=400)
+        if user.check_password(new_password):
+            return Response({"new_password": ["The new password must differ from the current one."]}, status=400)
+        user.set_password(new_password)
         user.save(update_fields=["password"])
+        reset.finish(user, row)
         return Response({"detail": "Password updated."})
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        ser = s.LogoutSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            token = RefreshToken(ser.validated_data["refresh"])
+            if str(token.get("user_id")) == str(request.user.pk):
+                token.blacklist()
+        except TokenError:
+            pass
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class GoogleLoginView(APIView):
