@@ -1,8 +1,9 @@
 from django.contrib.auth import get_user_model
-from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from .passwords import validate_password_strength
 
 User = get_user_model()
 
@@ -10,9 +11,9 @@ User = get_user_model()
 def clean_username(value):
     value = " ".join(value.split())
     if len(value) < 2:
-        raise serializers.ValidationError("Username must be at least 2 characters")
+        raise serializers.ValidationError("Username must be at least 2 characters.")
     if any(ord(ch) < 32 for ch in value):
-        raise serializers.ValidationError("Username contains invalid characters")
+        raise serializers.ValidationError("Username contains invalid characters.")
     return value
 
 
@@ -48,8 +49,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
 
     def validate_password(self, value):
-        validate_password(value)
-        return value
+        return validate_password_strength(value)
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
@@ -75,14 +75,25 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
-class PasswordResetConfirmSerializer(serializers.Serializer):
-    uid = serializers.CharField()
-    token = serializers.CharField()
-    new_password = serializers.CharField(write_only=True)
+class PasswordResetVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=20)
 
-    def validate_new_password(self, value):
-        validate_password(value)
-        return value
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    reset_token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, max_length=200)
+    new_password_confirm = serializers.CharField(write_only=True, required=False, max_length=200)
+
+    def validate(self, attrs):
+        confirm = attrs.get("new_password_confirm")
+        if confirm is not None and confirm != attrs["new_password"]:
+            raise serializers.ValidationError({"new_password_confirm": "Passwords do not match."})
+        return attrs
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
 
 
 class GoogleLoginSerializer(serializers.Serializer):
