@@ -34,8 +34,8 @@ class BaseTest(APITestCase):
 
 
 class MeasurementRulesTests(BaseTest):
-    def test_spec_covers_all_24_fields_from_tz(self):
-        self.assertEqual(len(SPEC), 24)
+    def test_spec_covers_all_fields_from_tz_plus_eu_foot_size(self):
+        self.assertEqual(len(SPEC), 25)
         r = self.client.get(reverse("measurement-spec"))
         self.assertEqual(r.status_code, 200)
         self.assertEqual({x["key"] for x in r.data}, set(SPEC))
@@ -179,6 +179,7 @@ import io
 import shutil
 import tempfile
 from pathlib import Path
+from uuid import uuid4
 from unittest import mock
 
 import numpy as np
@@ -286,11 +287,29 @@ class PhotoTests(BaseTest):
         with override_settings(MAX_PHOTO_BYTES=1000):
             self.assertEqual(self.upload(a).status_code, 413)
 
-    def test_at_most_three_photos(self):
+    def test_three_kinds_one_photo_each_and_a_new_upload_replaces_the_old(self):
         a = self.make()
-        for _ in range(settings.MAX_PHOTOS_PER_AVATAR):
-            self.assertEqual(self.upload(a).status_code, 201)
-        self.assertEqual(self.upload(a).status_code, 400)
+        ids = {}
+        for kind in ("front", "profile_left", "profile_right"):
+            r = self.upload(a, make_photo(), kind=kind)
+            self.assertEqual(r.status_code, 201, (kind, r.data))
+            ids[kind] = r.data["id"]
+        self.assertEqual(a.photos.count(), 3)
+        old_path = Path(AvatarPhoto.objects.get(pk=ids["front"]).file.path)
+        self.assertTrue(old_path.exists())
+        again = self.upload(a, make_photo(), kind="front")
+        self.assertEqual(again.status_code, 201)
+        self.assertEqual(a.photos.count(), 3)
+        self.assertFalse(AvatarPhoto.objects.filter(pk=ids["front"]).exists())
+        self.assertFalse(old_path.exists())
+        detail = self.client.get(reverse("avatar-detail", args=[a.pk])).data
+        self.assertEqual(sorted(p["kind"] for p in detail["photos"]), ["front", "profile_left", "profile_right"])
+        self.assertTrue(detail["has_front_photo"])
+
+    def test_legacy_kind_and_unknown_kinds_are_rejected(self):
+        a = self.make()
+        for kind in ("profile", "selfie", "FRONT"):
+            self.assertEqual(self.upload(a, make_photo(), kind=kind).status_code, 400, kind)
 
     def test_metadata_is_stripped_and_orientation_applied(self):
         a = self.make()
@@ -363,6 +382,19 @@ class GenerationTests(BaseTest):
         super().tearDownClass()
         shutil.rmtree(_TMP, ignore_errors=True)
 
+    def make(self, user=None, photo=True, **over):
+        avatar = super().make(user=user, **over)
+        if photo:
+            self.add_photo(avatar)
+        return avatar
+
+    def add_photo(self, avatar, kind="front"):
+        from django.core.files.base import ContentFile
+        p = AvatarPhoto(avatar=avatar, kind=kind, quality={"ok": True})
+        p.file.save(f"{p.pk}.jpg", ContentFile(make_photo().read()), save=False)
+        p.save()
+        return p
+
     def generate(self, a):
         return self.client.post(reverse("avatar-generate", args=[a.pk]))
 
@@ -385,6 +417,10 @@ class GenerationTests(BaseTest):
         self.assertEqual(doc["buffers"][0]["byteLength"], len(binary))
         self.assertAlmostEqual(doc["accessors"][0]["max"][1], 1.8, places=2)
         self.assertIn("waist", doc["nodes"][0]["extras"]["morph"])
+        self.assertEqual({x["state"] for x in st["stages"]}, {"done"})
+        self.assertEqual([x["key"] for x in st["stages"]],
+                         ["body_analysis", "face_mesh", "body_mesh", "skin_texture", "finalize"])
+        self.assertIsNotNone(st["generation_seconds"])
 
     def test_response_exposes_model_url_only_when_ready(self):
         a = self.make()
@@ -454,7 +490,8 @@ class GenerationTests(BaseTest):
                 self.assertLogs("avatars.services.generator", level="ERROR"):
             self.generate(a)
         st = self.status(a)
-        self.assertEqual((st["status"], st["stage"]), ("failed", "failed"))
+        self.assertEqual((st["status"], st["stage"]), ("failed", "body_analysis"))
+        self.assertEqual([x["state"] for x in st["stages"]], ["failed", "pending", "pending", "pending", "pending"])
         self.assertIn("boom", st["error"])
         self.generate(a)
         self.assertEqual(self.status(a)["status"], "ready")
@@ -484,3 +521,209 @@ class GenerationTests(BaseTest):
         a = self.make()
         codes = [self.generate(a).status_code for _ in range(12)]
         self.assertIn(429, codes)
+
+
+# --avatar wizard rules from the finished design--
+from .measurements import WIZARD, eu_to_length_cm, length_to_eu
+from .services.generator import STAGE_KEYS, cancel_generation, run_generation, stage_states
+
+
+class WizardRulesTests(BaseTest):
+    def create(self, **over):
+        return self.client.post(reverse("avatar-list"), self.payload(**over), format="json")
+
+    def test_height_range_is_100_to_250(self):
+        for ok, weight in ((100, 30), (250, 100), (172.5, 60)):
+            Avatar.objects.all().delete()
+            self.assertEqual(self.create(height_cm=ok, weight_kg=weight).status_code, 201, ok)
+        for bad in (99, 99.9, 250.1, 251, 0, -5):
+            self.assertEqual(self.create(height_cm=bad).status_code, 400, bad)
+
+    def test_eu_foot_size_conversion_matches_the_design_example(self):
+        self.assertEqual(eu_to_length_cm(42), 27.0)
+        self.assertEqual(length_to_eu(27.0), 42)
+        for eu in range(34, 51):
+            self.assertEqual(length_to_eu(eu_to_length_cm(eu)), eu, eu)
+
+    def test_foot_size_is_validated_and_the_length_is_derived(self):
+        self.assertTrue(validate_measurements({"foot_size_eu": 33}))
+        self.assertTrue(validate_measurements({"foot_size_eu": 51}))
+        self.assertEqual(validate_measurements({"foot_size_eu": 42, "foot_length": 27.0}), {})
+        r = self.create(measurements={**CORE, "foot_size_eu": 42})
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertIn("foot_length", r.data["estimated_fields"])
+        self.assertNotIn("foot_size_eu", r.data["estimated_fields"])
+        a = Avatar.objects.get(pk=r.data["id"])
+        self.assertEqual(a.full_measurements()[0]["foot_length"], 27.0)
+
+    def test_a_given_length_yields_an_estimated_eu_size_and_both_given_means_no_estimates(self):
+        full, est = estimate_missing(180, "male", {"foot_length": 27.0})
+        self.assertEqual((full["foot_size_eu"], "foot_size_eu" in est, "foot_length" in est), (42, True, False))
+        full, est = estimate_missing(180, "male", {"foot_length": 27.0, "foot_size_eu": 43})
+        self.assertEqual((full["foot_size_eu"], full["foot_length"]), (43, 27.0))
+        self.assertTrue({"foot_length", "foot_size_eu"}.isdisjoint(est))
+
+    def test_spec_endpoint_describes_the_wizard(self):
+        rows = self.client.get(reverse("measurement-spec")).data
+        self.assertEqual(len(rows), 25)
+        main = [r for r in rows if not r["advanced"]]
+        self.assertEqual([r["order"] for r in main], list(range(1, 15)))
+        by_key = {r["key"]: r for r in rows}
+        self.assertEqual((by_key["chest_circumference"]["order"], by_key["chest_circumference"]["step"]), (2, 2))
+        self.assertEqual(by_key["foot_size_eu"]["unit"], "EU")
+        self.assertEqual((by_key["foot_size_eu"]["step"], by_key["foot_size_eu"]["advanced"]), (3, False))
+        self.assertEqual({r["step"] for r in rows if r["advanced"]}, {2, 3})
+        self.assertEqual(sum(1 for r in rows if r["step"] == 2 and not r["advanced"]), 8)
+        self.assertEqual(sum(1 for r in rows if r["step"] == 3 and not r["advanced"]), 6)
+        self.assertEqual(sum(1 for r in rows if r["advanced"]), 11)
+        for r in rows:
+            self.assertEqual((len(r["steps"]["uk"]), len(r["steps"]["en"])), (3, 3), r["key"])
+            self.assertTrue(all(r["steps"]["uk"]) and all(r["steps"]["en"]))
+        self.assertEqual(set(WIZARD), set(SPEC))
+        self.assertEqual(sorted(r["order"] for r in rows), list(range(1, 26)))
+
+
+class AvatarLimitTests(BaseTest):
+    def test_at_most_five_profiles_per_user(self):
+        url = reverse("avatar-list")
+        for i in range(5):
+            self.assertEqual(self.client.post(url, self.payload(name=f"A{i}"), format="json").status_code, 201)
+        r = self.client.post(url, self.payload(name="Sixth"), format="json")
+        self.assertEqual((r.status_code, r.data["code"], r.data["limit"]), (400, "avatar_limit", 5))
+        self.assertEqual(Avatar.objects.filter(user=self.user).count(), 5)
+        victim = Avatar.objects.filter(user=self.user, is_default=False).first()
+        self.client.delete(reverse("avatar-detail", args=[victim.pk]))
+        self.assertEqual(self.client.post(url, self.payload(name="Again"), format="json").status_code, 201)
+
+    def test_the_limit_is_per_user(self):
+        for i in range(5):
+            self.make(name=f"A{i}")
+        self.client.force_authenticate(self.other)
+        r = self.client.post(reverse("avatar-list"), self.payload(gender="male"), format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+
+
+class StaleBannerTests(BaseTest):
+    def set_age(self, avatar, days):
+        Avatar.objects.filter(pk=avatar.pk).update(measurements_updated_at=timezone.now() - timezone.timedelta(days=days))
+
+    def test_age_and_stale_flag_drive_the_update_measurements_banner(self):
+        a = self.make()
+        for days, stale in ((0, False), (29, False), (30, True), (31, True)):
+            self.set_age(a, days)
+            data = self.client.get(reverse("avatar-detail", args=[a.pk])).data
+            self.assertEqual((data["measurements_age_days"], data["measurements_stale"]), (days, stale), days)
+
+    def test_editing_measurements_resets_the_banner(self):
+        a = self.make()
+        self.set_age(a, 45)
+        m = dict(a.measurements, waist_circumference=80)
+        self.client.patch(reverse("avatar-detail", args=[a.pk]), {"measurements": m}, format="json")
+        data = self.client.get(reverse("avatar-detail", args=[a.pk])).data
+        self.assertEqual((data["measurements_age_days"], data["measurements_stale"]), (0, False))
+
+
+@override_settings(MEDIA_ROOT=_TMP, FILE_ENCRYPTION_KEY=Fernet.generate_key().decode(), AVATAR_GENERATION_EAGER=True)
+class FrontPhotoAndCancelTests(BaseTest):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(_TMP, ignore_errors=True)
+
+    def photo(self, avatar, kind="front"):
+        from django.core.files.base import ContentFile
+        p = AvatarPhoto(avatar=avatar, kind=kind, quality={"ok": True})
+        p.file.save(f"{p.pk}.jpg", ContentFile(make_photo().read()), save=False)
+        p.save()
+
+    def generate(self, a):
+        return self.client.post(reverse("avatar-generate", args=[a.pk]))
+
+    def cancel(self, a):
+        return self.client.post(reverse("avatar-cancel", args=[a.pk]))
+
+    def test_generation_needs_a_front_photo(self):
+        a = self.make()
+        r = self.generate(a)
+        self.assertEqual((r.status_code, r.data["code"]), (400, "front_photo_required"))
+        self.photo(a, "profile_left")
+        self.photo(a, "profile_right")
+        self.assertEqual(self.generate(a).data["code"], "front_photo_required")
+        self.photo(a, "front")
+        self.assertEqual(self.generate(a).status_code, 202)
+
+    def test_cancel_without_a_model_returns_to_draft(self):
+        a = self.make()
+        self.photo(a)
+        Avatar.objects.filter(pk=a.pk).update(status="processing", stage="face_mesh", progress=25,
+                                              generation_run=uuid4(), processing_started_at=timezone.now())
+        r = self.cancel(a)
+        self.assertEqual((r.status_code, r.data["status"], r.data["progress"]), (200, "draft", 0))
+        a.refresh_from_db()
+        self.assertIsNone(a.generation_run)
+
+    def test_cancelling_a_regeneration_keeps_the_previous_model(self):
+        a = self.make()
+        self.photo(a)
+        self.generate(a)
+        a.refresh_from_db()
+        self.assertEqual(a.status, "ready")
+        Avatar.objects.filter(pk=a.pk).update(status="processing", stage="body_mesh", progress=50,
+                                              generation_run=uuid4(), processing_started_at=timezone.now())
+        self.assertEqual(self.cancel(a).data["status"], "ready")
+        self.assertEqual(self.client.get(reverse("avatar-model", args=[a.pk])).status_code, 200)
+
+    def test_cancel_when_nothing_runs_and_foreign_avatars(self):
+        a = self.make()
+        self.assertEqual(self.cancel(a).status_code, 409)
+        theirs = self.make(user=self.other, gender="male")
+        Avatar.objects.filter(pk=theirs.pk).update(status="processing")
+        self.assertEqual(self.cancel(theirs).status_code, 404)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.status, "processing")
+
+    def test_a_cancelled_worker_cannot_overwrite_anything(self):
+        a = self.make()
+        self.photo(a)
+        run_a, run_b = uuid4(), uuid4()
+        Avatar.objects.filter(pk=a.pk).update(status="processing", generation_run=run_a, stage="body_analysis",
+                                              processing_started_at=timezone.now())
+        cancel_generation(Avatar.objects.get(pk=a.pk))
+        run_generation(a.pk, run_a)
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.model_file.name if a.model_file else None), ("draft", None))
+        Avatar.objects.filter(pk=a.pk).update(status="processing", generation_run=run_b, stage="face_mesh", progress=25,
+                                              processing_started_at=timezone.now())
+        run_generation(a.pk, run_a)
+        a.refresh_from_db()
+        self.assertEqual((a.status, a.stage, a.progress, a.generation_run), ("processing", "face_mesh", 25, run_b))
+        self.assertFalse(a.model_file)
+
+    def test_status_endpoint_reports_rows_while_running(self):
+        a = self.make()
+        Avatar.objects.filter(pk=a.pk).update(status="processing", stage="body_mesh", progress=62,
+                                              processing_started_at=timezone.now() - timezone.timedelta(seconds=7))
+        st = self.client.get(reverse("avatar-generation-status", args=[a.pk])).data
+        self.assertEqual([x["state"] for x in st["stages"]], ["done", "done", "current", "pending", "pending"])
+        self.assertEqual(st["progress"], 62)
+        self.assertGreaterEqual(st["elapsed_seconds"], 7)
+        self.assertIsNone(st["generation_seconds"])
+
+    def test_stage_states_for_every_status(self):
+        keys = STAGE_KEYS
+        self.assertEqual([x["state"] for x in stage_states("draft", "")], ["pending"] * 5)
+        self.assertEqual([x["state"] for x in stage_states("ready", "done")], ["done"] * 5)
+        self.assertEqual([x["state"] for x in stage_states("processing", "body_analysis")][:2], ["current", "pending"])
+        self.assertEqual([x["state"] for x in stage_states("failed", "skin_texture")],
+                         ["done", "done", "done", "failed", "pending"])
+        self.assertEqual([x["key"] for x in stage_states("processing", "finalize")], keys)
+
+    def test_a_restart_after_cancel_works(self):
+        a = self.make()
+        self.photo(a)
+        Avatar.objects.filter(pk=a.pk).update(status="processing", generation_run=uuid4(),
+                                              processing_started_at=timezone.now())
+        self.assertEqual(self.generate(a).status_code, 409)
+        self.cancel(a)
+        self.assertEqual(self.generate(a).status_code, 202)
+        self.assertEqual(Avatar.objects.get(pk=a.pk).status, "ready")
