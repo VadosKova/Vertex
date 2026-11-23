@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
 
 from .measurements import (AGE_RANGE, HEIGHT_RANGE, REQUIRED, WEIGHT_RANGE, validate_bmi, validate_measurements)
@@ -16,17 +18,30 @@ class AvatarSerializer(serializers.ModelSerializer):
     gender = serializers.ChoiceField(choices=Avatar.Gender.choices, required=False)
     estimated_fields = serializers.SerializerMethodField()
     model_url = serializers.SerializerMethodField()
+    measurements_age_days = serializers.SerializerMethodField()
+    measurements_stale = serializers.SerializerMethodField()
+    has_front_photo = serializers.SerializerMethodField()
 
     class Meta:
         model = Avatar
         fields = ("id", "name", "gender", "age", "height_cm", "weight_kg", "body_type", "measurements",
                   "estimated_fields", "measurements_updated_at", "is_default", "status", "stage", "progress",
-                  "needs_regeneration", "error", "morph_params", "photos", "model_url", "created_at")
+                  "needs_regeneration", "error", "morph_params", "generation_seconds", "photos", "model_url",
+                  "measurements_age_days", "measurements_stale", "has_front_photo", "created_at")
         read_only_fields = ("id", "measurements_updated_at", "is_default", "status", "stage", "progress",
-                            "needs_regeneration", "error", "morph_params", "created_at")
+                            "needs_regeneration", "error", "morph_params", "generation_seconds", "created_at")
 
     def get_estimated_fields(self, obj):
         return obj.full_measurements()[1]
+
+    def get_measurements_age_days(self, obj):
+        return max(0, (timezone.now() - obj.measurements_updated_at).days)
+
+    def get_measurements_stale(self, obj):
+        return self.get_measurements_age_days(obj) >= getattr(settings, "MEASUREMENT_REMINDER_DAYS", 30)
+
+    def get_has_front_photo(self, obj):
+        return any(p.kind == "front" for p in obj.photos.all())
 
     def get_model_url(self, obj):
         request = self.context.get("request")
@@ -37,7 +52,7 @@ class AvatarSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         value = " ".join(value.split())
         if not value:
-            raise serializers.ValidationError("Name cannot be empty")
+            raise serializers.ValidationError("Name cannot be empty.")
         return value
 
     def validate_height_cm(self, v):
