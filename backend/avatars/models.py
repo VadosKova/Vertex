@@ -41,6 +41,8 @@ class Avatar(models.Model):
     stage = models.CharField(max_length=30, blank=True)
     progress = models.PositiveSmallIntegerField(default=0)
     processing_started_at = models.DateTimeField(null=True, blank=True)
+    generation_run = models.UUIDField(null=True, blank=True)
+    generation_seconds = models.FloatField(null=True, blank=True)
     needs_regeneration = models.BooleanField(default=True)
     error = models.CharField(max_length=200, blank=True)
     model_file = models.FileField(upload_to="avatars/", null=True, blank=True)
@@ -72,11 +74,12 @@ class AvatarDraft(models.Model):
 class AvatarPhoto(models.Model):
     class Kind(models.TextChoices):
         FRONT = "front"
-        PROFILE = "profile"
+        PROFILE_LEFT = "profile_left"
+        PROFILE_RIGHT = "profile_right"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     avatar = models.ForeignKey(Avatar, on_delete=models.CASCADE, related_name="photos")
-    kind = models.CharField(max_length=7, choices=Kind.choices, default=Kind.FRONT)
+    kind = models.CharField(max_length=13, choices=Kind.choices, default=Kind.FRONT)
     file = models.FileField(upload_to="photos/%Y/%m/", storage=private_storage)
     quality = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
