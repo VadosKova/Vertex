@@ -22,12 +22,13 @@ SPEC = {
     "calf_circumference": ("lower", 25, 60, "Найширше місце литки", "Widest part of the calf"),
     "ankle_circumference": ("lower", 15, 35, "Над кісточкою", "Just above the ankle bone"),
     "foot_length": ("foot", 20, 33, "Від п'яти до найдовшого пальця", "Heel to the longest toe"),
+    "foot_size_eu": ("foot", 34, 50, "Розмір на взутті (EU), або за довжиною стопи", "Size on your shoe (EU), or from your foot length"),
     "foot_width": ("foot", 7, 14, "У найширшому місці стопи", "Widest part of the foot"),
 }
 
 REQUIRED = ("chest_circumference", "waist_circumference", "hip_circumference")
 
-HEIGHT_RANGE = (120, 230)
+HEIGHT_RANGE = (100, 250)
 WEIGHT_RANGE = (30, 250)
 AGE_RANGE = (12, 100)
 
@@ -76,14 +77,87 @@ def validate_bmi(height_cm, weight_kg):
     return None if 12 <= bmi <= 60 else "Height/weight combination looks implausible."
 
 
+def eu_to_length_cm(eu):
+    return round(eu * 2 / 3 - 1.0, 1)
+
+
+def length_to_eu(length_cm):
+    return round((length_cm + 1.0) * 1.5)
+
+
 def estimate_missing(height_cm: float, gender: str, measurements: dict):
     idx = 0 if gender == "male" else 1
     full, estimated = dict(measurements), []
     for key, ratios in _RATIOS.items():
-        if key not in full:
+        if key not in full and key != "foot_length":
             full[key] = round(height_cm * ratios[idx], 1)
             estimated.append(key)
+    if "foot_length" not in full:
+        if "foot_size_eu" in full:
+            full["foot_length"] = eu_to_length_cm(full["foot_size_eu"])
+        else:
+            full["foot_length"] = round(height_cm * _RATIOS["foot_length"][idx], 1)
+        estimated.append("foot_length")
+    if "foot_size_eu" not in full:
+        full["foot_size_eu"] = length_to_eu(full["foot_length"])
+        estimated.append("foot_size_eu")
     if "thigh_circumference" not in full and "hip_circumference" in full:
         full["thigh_circumference"] = round(full["hip_circumference"] * 0.58, 1)
         estimated.append("thigh_circumference")
     return full, estimated
+
+
+_WIZARD_ROWS = [
+    (2, False, ["shoulder_width", "chest_circumference", "underbust_circumference", "waist_circumference",
+                "abdomen_circumference", "neck_circumference", "arm_length", "bicep_relaxed"]),
+    (3, False, ["hip_circumference", "inseam", "thigh_circumference", "knee_circumference", "calf_circumference",
+                "foot_size_eu"]),
+    (2, True, ["bicep_flexed", "forearm_circumference", "wrist_circumference", "torso_length",
+               "head_circumference", "face_length", "face_width"]),
+    (3, True, ["outseam", "ankle_circumference", "foot_length", "foot_width"]),
+]
+WIZARD = {}
+for _step, _adv, _keys in _WIZARD_ROWS:
+    for _key in _keys:
+        WIZARD[_key] = (_step, _adv, len(WIZARD) + 1)
+
+_LENGTHS = {"arm_length", "torso_length", "inseam", "outseam", "face_length", "foot_length"}
+_WIDTHS = {"shoulder_width", "face_width", "foot_width"}
+_PREP = {
+    "circumference": ("Станьте прямо, розслабте м'язи й дихайте спокійно.", "Stand straight, relax and breathe calmly."),
+    "length": ("Станьте прямо, ноги разом, дивіться перед собою.", "Stand straight, feet together, look ahead."),
+    "width": ("Станьте прямо й розслабтеся.", "Stand straight and relax."),
+}
+_CHECK = {
+    "circumference": ("Стрічка прилягає щільно, але не стискає. Зніміть значення на видиху.",
+                      "The tape should be snug, not tight. Read the value as you exhale."),
+    "length": ("Тримайте стрічку рівно, без провисання. Запишіть значення з точністю до 0,5 см.",
+               "Keep the tape straight, without sagging. Record to the nearest 0.5 cm."),
+    "width": ("Не стискайте стрічку, міряйте по прямій. Запишіть значення з точністю до 0,5 см.",
+              "Do not press the tape; measure in a straight line. Record to the nearest 0.5 cm."),
+}
+_EU_STEPS = {
+    "uk": ["Зніміть взуття й станьте на рівну поверхню.",
+           "Скористайтеся розміром (EU) на вашому взутті. Якщо його не знаєте, виміряйте довжину стопи.",
+           "Для півтора розміру між двома оберіть більший. Значення з вказаного діапазону."],
+    "en": ["Take off your shoes and stand on a flat surface.",
+           "Use the EU size on your shoes. If you do not know it, measure your foot length instead.",
+           "Between two sizes, choose the bigger one. Values are limited to the allowed range."],
+}
+
+
+def kind_of(key):
+    return "length" if key in _LENGTHS else "width" if key in _WIDTHS else "circumference"
+
+
+def spec_payload():
+    rows = []
+    for key, (group, lo, hi, uk, en) in SPEC.items():
+        step, advanced, order = WIZARD[key]
+        kind = kind_of(key)
+        steps = _EU_STEPS if key == "foot_size_eu" else {
+            "uk": [_PREP[kind][0], uk, _CHECK[kind][0]], "en": [_PREP[kind][1], en, _CHECK[kind][1]]}
+        rows.append({"key": key, "group": group, "min": lo, "max": hi,
+                     "unit": "EU" if key == "foot_size_eu" else "cm", "step": step, "advanced": advanced,
+                     "order": order, "hint": {"uk": uk, "en": en}, "steps": steps})
+    return sorted(rows, key=lambda r: r["order"])
