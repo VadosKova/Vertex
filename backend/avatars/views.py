@@ -11,11 +11,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .measurements import SPEC
+from .measurements import spec_payload
+from accounts.models import User
+
 from .models import Avatar, AvatarDraft, AvatarPhoto
 from .serializers import AvatarPhotoSerializer, AvatarSerializer
 from .services import photo_quality
-from .services.generator import is_busy, start_generation
+from .services.generator import cancel_generation, is_busy, stage_states, start_generation
 from .services.photo_processing import InvalidPhoto, load_and_sanitise
 
 
@@ -23,20 +25,26 @@ class MeasurementSpecView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response([
-            {"key": k, "group": g, "min": lo, "max": hi, "unit": "cm", "hint": {"uk": uk, "en": en}}
-            for k, (g, lo, hi, uk, en) in SPEC.items()
-        ])
+        return Response(spec_payload())
 
 
 class AvatarViewSet(viewsets.ModelViewSet):
     serializer_class = AvatarSerializer
     pagination_class = None
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
-    throttle_scope = None
+    throttle_scope = None  # set per action (generate)
 
     def get_queryset(self):
         return Avatar.objects.filter(user=self.request.user).prefetch_related("photos")
+
+    def create(self, request, *args, **kwargs):
+        limit = getattr(settings, "MAX_AVATARS_PER_USER", 5)
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=request.user.pk)
+            if Avatar.objects.filter(user=request.user).count() >= limit:
+                return Response({"code": "avatar_limit", "detail": f"At most {limit} avatars.", "limit": limit},
+                                status=status.HTTP_400_BAD_REQUEST)
+            return super().create(request, *args, **kwargs)
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -73,17 +81,33 @@ class AvatarViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], throttle_scope="generate")
     def generate(self, request, pk=None):
         avatar = self.get_object()
+        if not avatar.photos.filter(kind=AvatarPhoto.Kind.FRONT).exists():
+            return Response({"code": "front_photo_required", "detail": "A front face photo is required."},
+                            status=status.HTTP_400_BAD_REQUEST)
         if is_busy(avatar):
             return Response({"detail": "Generation already in progress."}, status=status.HTTP_409_CONFLICT)
         start_generation(avatar)
         avatar.refresh_from_db()
         return Response(self.get_serializer(avatar).data, status=status.HTTP_202_ACCEPTED)
 
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        avatar = self.get_object()
+        if avatar.status != Avatar.Status.PROCESSING:
+            return Response({"detail": "Generation is not in progress."}, status=status.HTTP_409_CONFLICT)
+        cancel_generation(avatar)
+        avatar.refresh_from_db()
+        return Response(self.get_serializer(avatar).data)
+
     @action(detail=True, methods=["get"], url_path="status")
     def generation_status(self, request, pk=None):
         a = self.get_object()
+        elapsed = None
+        if a.status == Avatar.Status.PROCESSING and a.processing_started_at:
+            elapsed = round((timezone.now() - a.processing_started_at).total_seconds(), 1)
         return Response({"status": a.status, "stage": a.stage, "progress": a.progress, "error": a.error,
-                         "needs_regeneration": a.needs_regeneration})
+                         "needs_regeneration": a.needs_regeneration, "stages": stage_states(a.status, a.stage),
+                         "elapsed_seconds": elapsed, "generation_seconds": a.generation_seconds})
 
     @action(detail=True, methods=["get"])
     def model(self, request, pk=None):
@@ -97,8 +121,6 @@ class AvatarViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser, FormParser])
     def photos(self, request, pk=None):
         avatar = self.get_object()
-        if avatar.photos.count() >= settings.MAX_PHOTOS_PER_AVATAR:
-            return Response({"detail": f"At most {settings.MAX_PHOTOS_PER_AVATAR} photos."}, status=400)
         upload = request.FILES.get("image")
         kind = request.data.get("kind", AvatarPhoto.Kind.FRONT)
         if not upload:
@@ -115,10 +137,14 @@ class AvatarViewSet(viewsets.ModelViewSet):
         if not quality["ok"]:
             return Response({"detail": "Photo quality is too low.", "issues": quality["issues"], "quality": quality},
                             status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        photo = AvatarPhoto(avatar=avatar, kind=kind, quality=quality)
-        photo.file.save(f"{photo.pk}.jpg", ContentFile(jpeg), save=False)
-        photo.save()
-        Avatar.objects.filter(pk=avatar.pk).update(needs_regeneration=True)
+        with transaction.atomic():
+            Avatar.objects.select_for_update().get(pk=avatar.pk)
+            for old in avatar.photos.filter(kind=kind):
+                old.delete()
+            photo = AvatarPhoto(avatar=avatar, kind=kind, quality=quality)
+            photo.file.save(f"{photo.pk}.jpg", ContentFile(jpeg), save=False)
+            photo.save()
+            Avatar.objects.filter(pk=avatar.pk).update(needs_regeneration=True)
         return Response(AvatarPhotoSerializer(photo).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get", "delete"], url_path=r"photos/(?P<photo_id>[0-9a-f-]+)")
