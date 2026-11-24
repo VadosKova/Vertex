@@ -11,6 +11,10 @@ ZONES = {
 }
 
 
+STANDARD_CATEGORIES = [("tshirts", "Футболки", "T-shirts"), ("hoodies", "Худі", "Hoodies"),
+                       ("jeans", "Джинси", "Jeans"), ("dresses", "Сукні", "Dresses")]
+
+
 class Brand(models.Model):
     name = models.CharField(max_length=80, unique=True)
 
@@ -44,6 +48,11 @@ class Product(models.Model):
     garment_model_url = models.URLField(max_length=500, blank=True)
     source_url = models.URLField(max_length=500, blank=True)
     fabric_stretch = models.FloatField(default=0.03)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    old_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=3, default="UAH")
+    fit_type = models.CharField(max_length=7, default="regular",
+                                choices=[("slim", "Slim"), ("regular", "Regular"), ("loose", "Loose")])
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE,
                               related_name="imported_products")
     is_template = models.BooleanField(default=False)
@@ -53,7 +62,7 @@ class Product(models.Model):
 
     class Meta:
         ordering = ["-created_at", "id"]
-        indexes = [models.Index(fields=["category", "gender"])]
+        indexes = [models.Index(fields=["category", "gender"]), models.Index(fields=["price"])]
         constraints = [
             models.UniqueConstraint(fields=["owner", "source_url"], condition=~models.Q(source_url=""),
                                     name="unique_import_per_owner"),
