@@ -2,6 +2,8 @@ from django.db.models import Exists, ExpressionWrapper, F, FloatField, OuterRef,
 
 from .models import ProductSize, ZONES
 
+STRETCH_ZONES = {"chest", "waist", "hips"}
+
 LOOSE_LIMIT_CM = 6.0
 
 
@@ -12,8 +14,11 @@ def fitting_products(queryset, measurements: dict):
         if value is None:
             continue
         cap = f"{zone}_cap"
-        sizes = sizes.annotate(**{cap: ExpressionWrapper(
-            F(f"{zone}_max") * (1 + F("product__fabric_stretch")), output_field=FloatField())})
+        if zone in STRETCH_ZONES:
+            sizes = sizes.annotate(**{cap: ExpressionWrapper(
+                F(f"{zone}_max") * (1 + F("product__fabric_stretch")), output_field=FloatField())})
+        else:
+            sizes = sizes.annotate(**{cap: ExpressionWrapper(F(f"{zone}_max") * 1.0, output_field=FloatField())})
         sizes = sizes.filter(
             Q(**{f"{zone}_min__isnull": True}) | Q(**{f"{zone}_max__isnull": True})
             | (Q(**{f"{cap}__gte": value}) & Q(**{f"{zone}_min__lte": value + LOOSE_LIMIT_CM}))
