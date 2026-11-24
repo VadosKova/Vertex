@@ -81,7 +81,6 @@ class ImportRequestSerializer(serializers.Serializer):
 
 
 class CommaListField(serializers.Field):
-
     def __init__(self, child, max_items=12, **kwargs):
         super().__init__(**kwargs)
         self.child, self.max_items = child, max_items
