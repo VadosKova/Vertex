@@ -19,9 +19,7 @@ class ItemCreateSerializer(serializers.Serializer):
     size = serializers.CharField(required=False, max_length=10)
 
 
-class ItemUpdateSerializer(serializers.ModelSerializer):
+class ItemUpdateSerializer(serializers.Serializer):
+    visible = serializers.BooleanField(required=False)
     size_label = serializers.CharField(required=False, max_length=10)
-
-    class Meta:
-        model = TryOnItem
-        fields = ("visible", "size_label", "layer")
+    layer = serializers.IntegerField(required=False, min_value=0)
