@@ -28,6 +28,14 @@ def evaluate_zone(zone, value, lo, hi, stretch):
             "intensity": round(min(1.0, slack / LOOSE_LIMIT_CM), 2), "penalty": slack}
 
 
+NOT_FITTING_CAP = 79
+
+
+def compatibility(score, fits):
+    pct = max(0, 100 - int(round(score)))
+    return pct if fits else min(pct, NOT_FITTING_CAP)
+
+
 def _cm(x):
     return max(1, int(x + 0.5))
 
@@ -68,7 +76,8 @@ def evaluate_size(size, measurements, stretch, lang="uk"):
         z["status"] == "loose" and z["delta_cm"] > LOOSE_LIMIT_CM for z in zones)
     public = [{k: v for k, v in z.items() if k != "penalty"} | {"color": COLORS[z["status"]]} for z in zones]
     return {"label": size.label, "order": size.order, "score": round(score, 2), "fits": fits,
-            "zones": public, "verdict": build_verdict(size.label, public, lang)}
+            "compatibility": compatibility(score, fits), "zones": public,
+            "verdict": build_verdict(size.label, public, lang)}
 
 
 def evaluate_product(product, measurements, lang="uk"):
