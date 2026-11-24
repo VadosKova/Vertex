@@ -46,7 +46,8 @@ class EvaluateView(APIView):
             return err
         if result is None:
             return Response({"detail": "Product has no size chart."}, status=422)
-        all_sizes = [{"label": r["label"], "score": r["score"], "fits": r["fits"]}
+        all_sizes = [{"label": r["label"], "score": r["score"], "fits": r["fits"],
+                      "compatibility": r["compatibility"]}
                      for r in evaluate_product(product, avatar.full_measurements()[0], lang)]
         return Response({"product_id": product.pk, "avatar_id": str(avatar.pk), "estimated_fields":
                          avatar.full_measurements()[1], "approximate": product.size_chart_source == "default",
