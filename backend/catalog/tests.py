@@ -202,8 +202,8 @@ class CatalogListTests(CatalogBase):
 
     def test_foreign_or_malformed_avatar_param_neither_leaks_nor_crashes(self):
         foreign = self.make_avatar(user=self.other, is_default=False)
-        self.assertEqual(self.client.get(reverse("products"), {"avatar": str(foreign.pk)}).status_code, 200)
-        self.assertEqual(self.client.get(reverse("products"), {"avatar": "garbage"}).status_code, 200)
+        self.assertEqual(self.client.get(reverse("products"), {"avatar": str(foreign.pk)}).status_code, 404)
+        self.assertEqual(self.client.get(reverse("products"), {"avatar": "garbage"}).status_code, 400)
 
     def test_without_an_avatar_everything_visible_is_shown(self):
         self.avatar.delete()
