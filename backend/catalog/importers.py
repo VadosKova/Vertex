@@ -15,6 +15,7 @@ MEASURE_SYNONYMS = {
     "hips": ("hip", "стег", "сідн"),
     "shoulders": ("shoulder", "плеч"),
     "inseam": ("inseam", "внутріш", "довжина ноги"),
+    "sleeve": ("sleeve", "рукав"),
 }
 SIZE_HEADERS = ("size", "розмір")
 CATEGORY_KEYWORDS = {
