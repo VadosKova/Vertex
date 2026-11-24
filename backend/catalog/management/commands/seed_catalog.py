@@ -1,9 +1,8 @@
 from django.core.management.base import BaseCommand
 
-from catalog.models import Brand, Category, Product, ProductSize
+from catalog.models import STANDARD_CATEGORIES, Brand, Category, Product, ProductSize
 
-CATEGORIES = [("tshirts", "Футболки", "T-shirts"), ("hoodies", "Худі", "Hoodies"),
-              ("jeans", "Джинси", "Jeans"), ("dresses", "Сукні", "Dresses")]
+CATEGORIES = STANDARD_CATEGORIES
 
 TOPS = {"S": ((88, 92), (74, 78), (92, 96)), "M": ((92, 100), (78, 86), (96, 102)),
         "L": ((100, 108), (86, 94), (102, 110)), "XL": ((108, 116), (94, 102), (110, 118))}
