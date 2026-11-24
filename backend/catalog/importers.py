@@ -1,4 +1,5 @@
 import ipaddress
+from decimal import Decimal, InvalidOperation
 import json
 import re
 import socket
@@ -136,6 +137,32 @@ def _parse_size_table(soup):
     return []
 
 
+CURRENCIES = {"UAH", "USD", "EUR", "PLN"}
+
+
+def _parse_price(ld):
+    offers = ld.get("offers")
+    if isinstance(offers, list):
+        offers = offers[0] if offers else None
+    if not isinstance(offers, dict):
+        return None, None
+    raw = offers.get("price", offers.get("lowPrice"))
+    currency = str(offers.get("priceCurrency") or "UAH").upper()
+    if raw is None or currency not in CURRENCIES:
+        return None, None
+    raw_text = str(raw).strip()
+    if raw_text.startswith("-"):
+        return None, None
+    text = re.sub(r"[^\d,.]", "", raw_text.replace("\xa0", " "))
+    if text.count(",") == 1 and "." not in text:
+        text = text.replace(",", ".")
+    try:
+        price = Decimal(text).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return None, None
+    return (price, currency) if 0 <= price < Decimal("10000000") else (None, None)
+
+
 def parse_product_page(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
     ld = _find_product_jsonld(soup) or {}
@@ -146,8 +173,10 @@ def parse_product_page(html: str) -> dict:
     image = ld.get("image") or (soup.find("meta", property="og:image") or {}).get("content", "")
     if isinstance(image, list):
         image = image[0] if image else ""
+    price, currency = _parse_price(ld)
     return {"title": (title or "").strip()[:200], "brand": (brand or "Unknown").strip()[:80],
-            "image_url": image if isinstance(image, str) else "", "sizes": _parse_size_table(soup)}
+            "image_url": image if isinstance(image, str) else "", "sizes": _parse_size_table(soup),
+            "price": price, "currency": currency or "UAH"}
 
 
 def guess_category_slug(title: str):
