@@ -8,6 +8,7 @@ ZONES = {
     "hips": "hip_circumference",
     "shoulders": "shoulder_width",
     "inseam": "inseam",
+    "sleeve": "arm_length",
 }
 
 
@@ -86,6 +87,8 @@ class ProductSize(models.Model):
     shoulders_max = models.FloatField(null=True, blank=True)
     inseam_min = models.FloatField(null=True, blank=True)
     inseam_max = models.FloatField(null=True, blank=True)
+    sleeve_min = models.FloatField(null=True, blank=True)
+    sleeve_max = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ["product_id", "order"]
