@@ -21,7 +21,7 @@ from .models import Brand, Category, Product, ProductSize
 EXAMPLE = Path(__file__).resolve().parent / "data" / "example_catalog.json"
 CATS = {"tshirts": ("Футболки", "T-shirts"), "hoodies": ("Худі", "Hoodies"),
         "jeans": ("Джинси", "Jeans"), "dresses": ("Сукні", "Dresses")}
-PLUS_LABELS = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL"]
+PLUS_LABELS = ["XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL", "6XL"]
 SIZES = [{"label": "S", "chest": [88, 92], "waist": [74, 78], "hips": [92, 96]},
          {"label": "M", "chest": [92, 100], "waist": [78, 86], "hips": [96, 102]}]
 
@@ -204,7 +204,7 @@ class DefaultChartTests(ImportBase):
         cases = [("tshirts", "male", 84, 70, 88, "XS"), ("tshirts", "male", 128, 114, 130, "3XL"),
                  ("tshirts", "male", 152, 138, 154, "6XL"), ("tshirts", "female", 144, 126, 150, "6XL"),
                  ("hoodies", "female", 120, 102, 126, "3XL"), ("jeans", "male", 112, 100, 120, "38"),
-                 ("jeans", "female", 100, 92, 126, "34"), ("dresses", "female", 112, 94, 118, "2XL")]
+                 ("jeans", "female", 100, 92, 126, "34"), ("dresses", "female", 112, 94, 118, "XXL")]
         for cat, gender, chest, waist, hips, label in cases:
             title = f"{cat}{gender}{chest}"
             import_catalog({"products": [{"brand": "B", "title": title, "category": cat, "gender": gender,
@@ -322,3 +322,20 @@ class CommandTests(ImportBase):
         self.assertIn("2 problem(s)", str(ctx.exception))
         self.assertIn("unknown category 'coats'", str(ctx.exception))
         self.assertEqual(Product.objects.count(), 1)
+
+
+class StandardCategoriesTests(APITestCase):
+    def test_example_file_imports_without_seeding_and_dry_run_creates_nothing(self):
+        data = load_file(EXAMPLE)
+        self.assertEqual(Category.objects.count(), 0)
+        import_catalog(data, dry_run=True)
+        self.assertEqual((Category.objects.count(), Product.objects.count()), (0, 0))
+        import_catalog(data)
+        self.assertEqual(set(Category.objects.values_list("slug", flat=True)), {"tshirts", "jeans", "dresses"})
+        self.assertEqual(Category.objects.get(slug="jeans").name_uk, "Джинси")
+
+    def test_unknown_categories_are_still_rejected(self):
+        with self.assertRaises(CatalogDataError) as ctx:
+            import_catalog({"products": [product(category="coats")]})
+        self.assertIn("unknown category 'coats'", ctx.exception.errors[0])
+        self.assertEqual(Category.objects.count(), 0)
