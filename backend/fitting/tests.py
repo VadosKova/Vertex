@@ -197,13 +197,15 @@ class WardrobeSessionTests(CatalogBase):
         statuses = {z["zone"]: z["status"] for z in items[0]["fit"]["zones"]}
         self.assertEqual(statuses["chest"], "tight")
 
-    def test_same_item_twice_and_item_limit(self):
+    def test_same_item_twice_and_the_four_layer_limit(self):
         sid = self.new_session()
         self.assertEqual(self.add(sid, self.tee).status_code, 201)
-        self.assertEqual(self.add(sid, self.tee).status_code, 409)
-        for i in range(9):
+        dup = self.add(sid, self.tee)
+        self.assertEqual((dup.status_code, dup.data["code"]), (409, "already_added"))
+        for i in range(3):
             self.assertEqual(self.add(sid, self.make_product(title=f"P{i}")).status_code, 201)
-        self.assertEqual(self.add(sid, self.make_product(title="One too many")).status_code, 400)
+        over = self.add(sid, self.make_product(title="One too many"))
+        self.assertEqual((over.status_code, over.data["code"], over.data["limit"]), (400, "layer_limit", 4))
 
     def test_session_list_delete_and_missing_avatar(self):
         sid = self.new_session()
