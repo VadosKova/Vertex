@@ -8,12 +8,14 @@ from django.db import transaction
 from avatars.measurements import SPEC
 
 from .default_charts import default_chart
-from .models import Brand, Category, Product, ProductSize, ZONES
+from .models import STANDARD_CATEGORIES, Brand, Category, Product, ProductSize, ZONES
 
 MAX_PRODUCTS = 5000
 GENDERS = {"male", "female", "unisex"}
 PRODUCT_KEYS = {"brand", "title", "category", "gender", "image_url", "garment_model_url", "source_url",
-                "fabric_stretch", "sizes", "use_default_chart"}
+                "fabric_stretch", "sizes", "use_default_chart", "price", "old_price", "currency", "fit_type"}
+FIT_TYPES = {"slim", "regular", "loose"}
+CURRENCIES = {"UAH", "USD", "EUR", "PLN"}
 _url_validator = URLValidator(schemes=["http", "https"])
 
 
@@ -140,6 +142,23 @@ def validate(data, known_categories):
         stretch = raw.get("fabric_stretch", 0.03)
         if not _number(stretch) or not 0 <= stretch <= 0.3:
             errors.append(f"{where}: 'fabric_stretch' must be a number from 0 to 0.3.")
+        currency = raw.get("currency", "UAH")
+        if currency not in CURRENCIES:
+            errors.append(f"{where}: 'currency' must be one of {', '.join(sorted(CURRENCIES))}.")
+        fit_type = raw.get("fit_type", "regular")
+        if fit_type not in FIT_TYPES:
+            errors.append(f"{where}: 'fit_type' must be one of {', '.join(sorted(FIT_TYPES))}.")
+        prices = {}
+        for field in ("price", "old_price"):
+            value = raw.get(field)
+            if value is None:
+                prices[field] = None
+            elif not _number(value) or not 0 <= value < 10_000_000:
+                errors.append(f"{where}: '{field}' must be a number from 0 to 10 000 000.")
+            else:
+                prices[field] = round(value, 2)
+        if prices.get("old_price") is not None and (prices.get("price") is None or prices["old_price"] <= prices["price"]):
+            errors.append(f"{where}: 'old_price' needs a 'price' and must be greater than it.")
         urls = {}
         for field in ("image_url", "garment_model_url", "source_url"):
             value = raw.get(field, "")
@@ -168,23 +187,29 @@ def validate(data, known_categories):
 
         if len(errors) == n_before:
             products.append({"brand": brand, "title": title, "category": category, "gender": gender,
-                             "fabric_stretch": float(stretch), "sizes": entries, "size_chart_source": source, **urls})
+                             "fabric_stretch": float(stretch), "sizes": entries, "size_chart_source": source,
+                             "currency": currency, "fit_type": fit_type, **prices, **urls})
     return products, errors
 
 
 def import_catalog(data, dry_run=False):
     categories = {c.slug: c for c in Category.objects.all()}
-    products, errors = validate(data, set(categories))
+    names = {slug: (uk, en) for slug, uk, en in STANDARD_CATEGORIES}
+    products, errors = validate(data, set(categories) | set(names))
     if errors:
         raise CatalogDataError(errors)
     report = ImportReport()
     with transaction.atomic():
         for item in products:
             brand = Brand.objects.filter(name__iexact=item["brand"]).first() or Brand.objects.create(name=item["brand"])
+            if item["category"] not in categories:
+                uk, en = names[item["category"]]
+                categories[item["category"]] = Category.objects.create(slug=item["category"], name_uk=uk, name_en=en)
             fields = {"category": categories[item["category"]], "gender": item["gender"],
                       "fabric_stretch": item["fabric_stretch"], "image_url": item["image_url"],
                       "garment_model_url": item["garment_model_url"], "source_url": item["source_url"],
-                      "size_chart_source": item["size_chart_source"], "is_template": True}
+                      "size_chart_source": item["size_chart_source"], "is_template": True, "price": item["price"],
+                      "old_price": item["old_price"], "currency": item["currency"], "fit_type": item["fit_type"]}
             product = Product.objects.filter(brand=brand, title__iexact=item["title"], owner__isnull=True).first()
             if product:
                 for key, value in fields.items():
