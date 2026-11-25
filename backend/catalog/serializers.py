@@ -75,9 +75,22 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class ImportRequestSerializer(serializers.Serializer):
-    url = serializers.URLField(max_length=500)
+    url = serializers.URLField(max_length=500, required=False)
+    preview_token = serializers.CharField(max_length=12000, required=False)
     category = serializers.SlugField(required=False)
     gender = serializers.ChoiceField(choices=Product.Gender.choices, required=False)
+    avatar = serializers.UUIDField(required=False)
+
+    def validate(self, attrs):
+        if not attrs.get("url") and not attrs.get("preview_token"):
+            raise serializers.ValidationError({"url": "Send a link (or a preview_token)."})
+        return attrs
+
+
+class SimilarQuerySerializer(serializers.Serializer):
+    avatar = serializers.UUIDField(required=False)
+    personalized = serializers.BooleanField(required=False, default=True)
+    limit = serializers.IntegerField(required=False, default=10, min_value=1, max_value=20)
 
 
 class CommaListField(serializers.Field):
