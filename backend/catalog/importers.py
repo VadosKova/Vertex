@@ -18,12 +18,14 @@ MEASURE_SYNONYMS = {
     "sleeve": ("sleeve", "рукав"),
 }
 SIZE_HEADERS = ("size", "розмір")
-CATEGORY_KEYWORDS = {
-    "tshirts": ("t-shirt", "tee", "футболк"),
-    "hoodies": ("hoodie", "sweatshirt", "худі", "світшот"),
-    "jeans": ("jeans", "denim", "джинс"),
-    "dresses": ("dress", "сукн", "плат"),
+
+CATEGORY_PATTERNS = {
+    "tshirts": (r"\bt-?shirts?\b", r"\btees?\b", r"футболк"),
+    "hoodies": (r"\bhoodies?\b", r"\bsweatshirts?\b", r"\bхуд[іи]", r"світшот"),
+    "jeans": (r"\bjeans\b", r"\bdenim\b", r"джинс"),
+    "dresses": (r"\bdress(?:es)?\b", r"\bсукн", r"\bплаття"),
 }
+_CATEGORY_RES = {slug: [re.compile(p, re.IGNORECASE) for p in pats] for slug, pats in CATEGORY_PATTERNS.items()}
 
 
 class PageImportError(Exception):
@@ -45,23 +47,43 @@ def assert_public_url(url: str):
             raise PageImportError("forbidden_host", "URL points to a non-public address.")
 
 
+BLOCK_STATUSES = {401, 403, 429, 503}
+CHALLENGE_MARKERS = ("just a moment", "cf-chl", "captcha", "access denied", "are you a robot",
+                     "verify you are human", "px-captcha")
+
+
+def looks_blocked(html: str) -> bool:
+    low = html[:40000].lower()
+    return (any(m in low for m in CHALLENGE_MARKERS)
+            and "application/ld+json" not in low and "<table" not in low)
+
+
 def fetch_html(url: str) -> str:
     headers = {"User-Agent": "VertexBot/1.0 (+size-chart-import)"}
     for _ in range(4):
         assert_public_url(url)
         try:
             resp = requests.get(url, headers=headers, timeout=(3, 8), stream=True, allow_redirects=False)
+        except requests.Timeout:
+            raise PageImportError("timeout", "The shop did not answer in time.")
         except requests.RequestException:
             raise PageImportError("fetch_failed", "Could not download the page.")
         if resp.is_redirect and resp.headers.get("Location"):
             url = urljoin(url, resp.headers["Location"])
             continue
+        if resp.status_code in BLOCK_STATUSES:
+            raise PageImportError("blocked_by_site", "The shop blocks automatic access.")
+        if resp.status_code in (404, 410):
+            raise PageImportError("not_found", "The product page was not found.")
         if resp.status_code >= 400:
             raise PageImportError("fetch_failed", f"Remote site answered {resp.status_code}.")
         body = resp.raw.read(settings.IMPORT_MAX_BYTES + 1, decode_content=True)
         if len(body) > settings.IMPORT_MAX_BYTES:
             raise PageImportError("too_large", "Page is too large.")
-        return body.decode(resp.encoding or "utf-8", errors="replace")
+        html = body.decode(resp.encoding or "utf-8", errors="replace")
+        if looks_blocked(html):
+            raise PageImportError("blocked_by_site", "The shop blocks automatic access.")
+        return html
     raise PageImportError("too_many_redirects", "Too many redirects.")
 
 
@@ -76,7 +98,7 @@ def parse_range(text: str, inches=False):
         a, b = (float(x.replace(",", ".")) * f for x in m.groups())
         return (min(a, b), max(a, b))
     m = _NUM.search(text)
-    if m:
+    if m:  # single number -> ±2 cm tolerance
         v = float(m.group(1).replace(",", ".")) * f
         return (v - 2, v + 2)
     return None
@@ -164,7 +186,31 @@ def _parse_price(ld):
     return (price, currency) if 0 <= price < Decimal("10000000") else (None, None)
 
 
-def parse_product_page(html: str) -> dict:
+ADAPTERS = {}
+
+
+def register_adapter(domain, fn):
+    ADAPTERS[domain.lower()] = fn
+
+
+def _adapter_for(url):
+    host = (urlparse(url).hostname or "").lower() if url else ""
+    for domain, fn in ADAPTERS.items():
+        if host == domain or host.endswith("." + domain):
+            return fn
+    return None
+
+
+def parse_product_page(html: str, url: str = None) -> dict:
+    adapter = _adapter_for(url)
+    if adapter:
+        result = adapter(html, url)
+        if result is not None:
+            return result
+    return _parse_generic(html)
+
+
+def _parse_generic(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
     ld = _find_product_jsonld(soup) or {}
     title = ld.get("name") or (soup.find("meta", property="og:title") or {}).get("content") \
@@ -180,9 +226,9 @@ def parse_product_page(html: str) -> dict:
             "price": price, "currency": currency or "UAH"}
 
 
-def guess_category_slug(title: str):
-    low = title.lower()
-    for slug, words in CATEGORY_KEYWORDS.items():
-        if any(w in low for w in words):
+def guess_category_slug(text: str):
+    text = text or ""
+    for slug, patterns in _CATEGORY_RES.items():
+        if any(p.search(text) for p in patterns):
             return slug
     return None
