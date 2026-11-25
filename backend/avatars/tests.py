@@ -259,6 +259,13 @@ class PhotoTests(BaseTest):
         photos = self.client.get(reverse("avatar-detail", args=[a.pk])).data["photos"]
         self.assertEqual([p["id"] for p in photos], [pid])
 
+    def test_the_photo_size_limit_has_a_default_when_the_setting_is_missing(self):
+        from django.conf import settings
+        a = self.make()
+        with override_settings():
+            del settings.MAX_PHOTO_BYTES
+            self.assertEqual(self.upload(a).status_code, 201)
+
     def test_bad_quality_returns_422_with_issue_codes_and_saves_nothing(self):
         a = self.make()
         for kind, issue in (("blurry", "blurry"), ("dark", "too_dark"), ("bright", "too_bright")):
