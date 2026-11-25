@@ -18,7 +18,7 @@ MAX_SIZES = 40
 
 
 class NeedsCategory(Exception):
-
+    pass
 
 class _Sizes(list):
     def all(self):
