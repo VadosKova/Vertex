@@ -32,7 +32,7 @@ class AvatarViewSet(viewsets.ModelViewSet):
     serializer_class = AvatarSerializer
     pagination_class = None
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
-    throttle_scope = None  # set per action (generate)
+    throttle_scope = None
 
     def get_queryset(self):
         return Avatar.objects.filter(user=self.request.user).prefetch_related("photos")
@@ -127,7 +127,7 @@ class AvatarViewSet(viewsets.ModelViewSet):
             return Response({"image": ["This field is required."]}, status=400)
         if kind not in AvatarPhoto.Kind.values:
             return Response({"kind": ["Invalid kind."]}, status=400)
-        if upload.size > settings.MAX_PHOTO_BYTES:
+        if upload.size > getattr(settings, "MAX_PHOTO_BYTES", 8 * 1024 * 1024):
             return Response({"image": ["File too large."]}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
         try:
             img, jpeg = load_and_sanitise(upload.read())
