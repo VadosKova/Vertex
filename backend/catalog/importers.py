@@ -77,8 +77,9 @@ def fetch_html(url: str) -> str:
             raise PageImportError("not_found", "The product page was not found.")
         if resp.status_code >= 400:
             raise PageImportError("fetch_failed", f"Remote site answered {resp.status_code}.")
-        body = resp.raw.read(settings.IMPORT_MAX_BYTES + 1, decode_content=True)
-        if len(body) > settings.IMPORT_MAX_BYTES:
+        limit = getattr(settings, "IMPORT_MAX_BYTES", 2 * 1024 * 1024)
+        body = resp.raw.read(limit + 1, decode_content=True)
+        if len(body) > limit:
             raise PageImportError("too_large", "Page is too large.")
         html = body.decode(resp.encoding or "utf-8", errors="replace")
         if looks_blocked(html):
@@ -98,7 +99,7 @@ def parse_range(text: str, inches=False):
         a, b = (float(x.replace(",", ".")) * f for x in m.groups())
         return (min(a, b), max(a, b))
     m = _NUM.search(text)
-    if m:  # single number -> ±2 cm tolerance
+    if m:
         v = float(m.group(1).replace(",", ".")) * f
         return (v - 2, v + 2)
     return None
