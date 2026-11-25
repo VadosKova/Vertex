@@ -98,6 +98,13 @@ class NotificationApiTests(NotificationBase):
         self.assertEqual([n["id"] for n in r.data["results"]], [mine[1].pk, mine[0].pk])
         self.assertEqual(r.data["unread_count"], 2)
 
+    def test_same_timestamp_does_not_make_the_order_random(self):
+        notes = self.make_notes(self.user, 5)
+        Notification.objects.update(created_at=timezone.now())
+        for _ in range(3):
+            ids = [n["id"] for n in self.client.get(reverse("notifications")).data["results"]]
+            self.assertEqual(ids, sorted((n.pk for n in notes), reverse=True))
+
     def test_mark_one_and_mark_all(self):
         a, b = self.make_notes(self.user, 2)
         r = self.client.post(reverse("notification-read", args=[a.pk]))
