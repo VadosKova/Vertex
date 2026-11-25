@@ -28,7 +28,7 @@ class NotificationListView(generics.ListAPIView):
     pagination_class = NotificationPagination
 
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user)
+        return Notification.objects.filter(user=self.request.user).order_by("-created_at", "-id")
 
 
 class MarkReadView(APIView):
