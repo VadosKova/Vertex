@@ -8,14 +8,20 @@ from rest_framework.views import APIView
 
 from avatars.models import Avatar
 
-from .default_charts import default_chart
 from .filtering import fitting_products
-from .importers import PageImportError, fetch_html, guess_category_slug, parse_product_page
+from django.core import signing
+from django.shortcuts import get_object_or_404
+
+from .importers import PageImportError, fetch_html, guess_category_slug
+from .importflow import (NeedsCategory, build_preview, create_from_preview, make_token, public_preview,
+                         read_token)
+from .shops import listed_shops
+from urllib.parse import urlparse
 from .models import Brand, Category, Product, ProductSize
 from fitting.engine import recommend_size
 
 from .serializers import (CatalogQuerySerializer, CategorySerializer, ImportRequestSerializer,
-                          ProductSerializer)
+                          ProductSerializer, SimilarQuerySerializer)
 
 
 def resolve_avatar(request, avatar_id=None):
@@ -153,42 +159,92 @@ class ProductDetailView(generics.RetrieveAPIView):
         return ctx
 
 
+def _import_error(exc, url):
+    body = {"code": exc.code, "detail": str(exc)}
+    if exc.code not in ("invalid_url", "forbidden_host"):
+        body["suggestion"] = "choose_from_catalog"
+        slug = guess_category_slug(urlparse(url).path)
+        if slug:
+            body["category"] = slug
+    return Response(body, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+def _measurements(request, avatar_id=None):
+    avatar = resolve_avatar(request, avatar_id)
+    return avatar.full_measurements()[0] if avatar else None
+
+
+class ImportShopsView(APIView):
+    def get(self, request):
+        return Response({"shops": listed_shops()})
+
+
+class ProductImportPreviewView(APIView):
+    throttle_scope = "import"
+
+    def post(self, request):
+        ser = ImportRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        if not d.get("url"):
+            return Response({"url": ["This field is required."]}, status=400)
+        try:
+            data = build_preview(request.user, d["url"], fetch_html, d.get("category"), d.get("gender"))
+        except PageImportError as exc:
+            return _import_error(exc, d["url"])
+        body = public_preview(data, _measurements(request, d.get("avatar")))
+        body["preview_token"] = make_token(request.user, data)
+        return Response(body)
+
+
 class ProductImportView(APIView):
     throttle_scope = "import"
 
     def post(self, request):
         ser = ImportRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        url = ser.validated_data["url"]
-        existing = Product.objects.filter(owner=request.user, source_url=url).first()
-        if existing:
-            return Response(ProductSerializer(existing).data)
+        d = ser.validated_data
+        if d.get("preview_token"):
+            try:
+                data = read_token(request.user, d["preview_token"])
+            except signing.BadSignature:
+                return Response({"code": "invalid_preview", "detail": "The preview expired. Open the link again."},
+                                status=status.HTTP_400_BAD_REQUEST)
+        else:
+            try:
+                data = build_preview(request.user, d["url"], fetch_html, d.get("category"), d.get("gender"))
+            except PageImportError as exc:
+                return _import_error(exc, d["url"])
         try:
-            parsed = parse_product_page(fetch_html(url))
-        except PageImportError as exc:
-            return Response({"code": exc.code, "detail": str(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-
-        slug = ser.validated_data.get("category") or guess_category_slug(parsed["title"])
-        category = Category.objects.filter(slug=slug).first() if slug else None
-        gender = ser.validated_data.get("gender", "unisex")
-        sizes, source = parsed["sizes"], "brand"
-        if not sizes:
-            for tpl in Product.objects.filter(is_template=True, brand__name__iexact=parsed["brand"]):
-                if tpl.title.lower() in parsed["title"].lower():
-                    return Response(ProductSerializer(tpl).data)
-            sizes = default_chart(slug, gender) if category else None
-            source = "default"
-            if sizes is None:
-                return Response({"code": "size_chart_not_found",
-                                 "detail": "Could not find a size chart on the page."},
-                                status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        if not category:
+            product, created = create_from_preview(request.user, data, d.get("category"), d.get("gender"))
+        except NeedsCategory:
             return Response({"category": ["Could not detect the category; please pass one."]}, status=400)
-        brand, _ = Brand.objects.get_or_create(name=parsed["brand"])
-        product = Product.objects.create(
-            brand=brand, category=category, title=parsed["title"], image_url=parsed["image_url"],
-            source_url=url, owner=request.user, gender=gender, size_chart_source=source,
-            price=parsed["price"], currency=parsed["currency"])
-        ProductSize.objects.bulk_create([ProductSize(product=product, **s) for s in sizes])
         product = visible_products(request.user).get(pk=product.pk)
-        return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
+        measurements = _measurements(request, d.get("avatar"))
+        return Response(ProductSerializer(product, context={"measurements": measurements}).data,
+                        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class SimilarProductsView(APIView):
+    def get(self, request, pk):
+        product = get_object_or_404(visible_products(request.user), pk=pk)
+        ser = SimilarQuerySerializer(data=request.query_params)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        avatar = resolve_avatar(request, d.get("avatar"))
+        qs = visible_products(request.user).filter(category=product.category).exclude(pk=product.pk)
+        measurements = avatar.full_measurements()[0] if avatar else None
+        if avatar and d["personalized"]:
+            qs = qs.filter(gender__in=[avatar.gender, "unisex"])
+            qs = fitting_products(qs, measurements)
+        elif product.gender != "unisex":
+            qs = qs.filter(gender__in=[product.gender, "unisex"])
+        rows = []
+        for item in qs.order_by("-created_at", "id")[:MAX_COMPAT_CANDIDATES]:
+            rec = recommend_size(item, measurements) if measurements else None
+            rows.append((item, rec["label"] if rec else None, rec["compatibility"] if rec else None))
+        rows.sort(key=lambda r: -(r[2] or 0))
+        rows = rows[:d["limit"]]
+        compat = {p.pk: (label, pct) for p, label, pct in rows}
+        context = {"request": request, "measurements": measurements, "compat_map": compat}
+        return Response(ProductSerializer([r[0] for r in rows], many=True, context=context).data)
