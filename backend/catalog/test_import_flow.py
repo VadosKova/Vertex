@@ -243,6 +243,17 @@ class FetchHardeningTests(ImportBase):
         table_only = b"<table><tr><th>Size</th></tr></table><footer>captcha</footer>"
         self.assertIn("<table", self.fetch(resp=fake_response(200, table_only)))
 
+    def test_settings_are_optional_the_limit_has_a_default(self):
+        from django.conf import settings
+        from django.test import override_settings
+        with override_settings():
+            del settings.IMPORT_MAX_BYTES
+            self.assertEqual(self.fetch(resp=fake_response(200, b"<html>ok</html>")), "<html>ok</html>")
+        big = fake_response(200, b"x" * (2 * 1024 * 1024 + 1))
+        with override_settings():
+            del settings.IMPORT_MAX_BYTES
+            self.assertEqual(self.code(resp=big), "too_large")
+
     def test_an_ordinary_page_passes_through(self):
         self.assertEqual(self.fetch(resp=fake_response(200, b"<html>hello</html>")), "<html>hello</html>")
 
