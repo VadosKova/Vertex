@@ -20,3 +20,10 @@ class Command(BaseCommand):
         prefix = "[dry run] would be " if options["dry_run"] else ""
         self.stdout.write(self.style.SUCCESS(
             f"{prefix}imported: {report.created} created, {report.updated} updated."))
+        if report.price_drops:
+            if options["dry_run"]:
+                self.stdout.write(f"[dry run] {len(report.price_drops)} price drop(s) would be announced.")
+            else:
+                from notifications.services import notify_price_drops
+                users = notify_price_drops(report.price_drops)
+                self.stdout.write(f"{len(report.price_drops)} price drop(s); {users} user(s) notified.")
