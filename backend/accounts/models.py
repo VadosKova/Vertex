@@ -1,3 +1,5 @@
+import datetime
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
@@ -52,6 +54,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     language = models.CharField(max_length=2, choices=Language.choices, default=Language.UK)
     theme = models.CharField(max_length=6, choices=Theme.choices, default=Theme.SYSTEM)
     reminder_enabled = models.BooleanField(default=True)
+    reminder_day = models.PositiveSmallIntegerField(default=1)
+    reminder_time = models.TimeField(default=datetime.time(10, 0))
+    timezone_name = models.CharField(max_length=64, default="Europe/Kyiv")
+    push_enabled = models.BooleanField(default=True)
+    in_app_enabled = models.BooleanField(default=True)
     last_reminder_at = models.DateTimeField(null=True, blank=True)
 
     objects = UserManager()
