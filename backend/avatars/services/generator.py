@@ -21,13 +21,14 @@ REFERENCE = {
     "male": {"chest": 0.55, "waist": 0.46, "hips": 0.55, "shoulders": 0.259},
     "female": {"chest": 0.52, "waist": 0.40, "hips": 0.57, "shoulders": 0.230},
 }
-MORPH_KEYS = {"chest": "chest_circumference", "waist": "waist_circumference", "hips": "hip_circumference", "shoulders": "shoulder_width"}
+MORPH_KEYS = {"chest": "chest_circumference", "waist": "waist_circumference",
+              "hips": "hip_circumference", "shoulders": "shoulder_width"}
 BODY_TYPE_BIAS = {"ectomorph": -0.05, "mesomorph": 0.0, "endomorph": 0.08}
 STALE_AFTER = timezone.timedelta(minutes=5)
 
 
 class _Abandoned(Exception):
-    """The run was cancelled or superseded while it was working: stop silently, write nothing."""
+    pass
 
 
 def compute_morph_params(avatar: Avatar) -> dict:
@@ -95,12 +96,22 @@ def run_generation(avatar_id, run):
             generation_seconds=seconds, generation_run=None)
         if not done:
             avatar.model_file.delete(save=False)
+        else:
+            _notify_ready(avatar_id)
     except _Abandoned:
         return
     except Exception as exc:  # noqa: BLE001
         log.exception("Avatar generation failed")
         _running(avatar_id, run).update(status=Avatar.Status.FAILED, stage=stage, error=str(exc)[:200],
                                         generation_run=None)
+
+
+def _notify_ready(avatar_id):
+    try:
+        from notifications.services import notify_avatar_ready
+        notify_avatar_ready(Avatar.objects.select_related("user").get(pk=avatar_id))
+    except Exception:  # noqa: BLE001
+        log.exception("Could not send the 'avatar ready' notification")
 
 
 def _run_in_worker(avatar_id, run):
