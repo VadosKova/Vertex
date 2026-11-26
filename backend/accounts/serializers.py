@@ -1,3 +1,7 @@
+from datetime import timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -19,11 +23,22 @@ def clean_username(value):
 
 class UserSettingsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(max_length=30)
+    reminder_day = serializers.IntegerField(min_value=1, max_value=28, required=False)
+    reminder_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"], required=False)
+    timezone = serializers.CharField(source="timezone_name", max_length=64, required=False)
 
     class Meta:
         model = User
-        fields = ("id", "email", "username", "gender", "language", "theme", "reminder_enabled")
+        fields = ("id", "email", "username", "gender", "language", "theme", "reminder_enabled", "reminder_day",
+                  "reminder_time", "timezone", "push_enabled", "in_app_enabled")
         read_only_fields = ("id", "email")
+
+    def validate_timezone(self, value):
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            raise serializers.ValidationError("Unknown time zone (use an IANA name such as Europe/Kyiv).")
+        return value
 
     def validate_username(self, value):
         return clean_username(value)
@@ -64,11 +79,17 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
+    remember_me = serializers.BooleanField(required=False, default=True)
+
     def validate(self, attrs):
         attrs[self.username_field] = attrs[self.username_field].strip().lower()
-        data = super().validate(attrs)
-        data["user"] = UserSettingsSerializer(self.user).data
-        return data
+        remember = attrs.pop("remember_me", True)
+        super(TokenObtainPairSerializer, self).validate(attrs)
+        refresh = self.get_token(self.user)
+        days = getattr(settings, "REFRESH_REMEMBER_DAYS", 30) if remember else getattr(settings, "REFRESH_SESSION_DAYS", 1)
+        refresh.set_exp(lifetime=timedelta(days=days))
+        return {"refresh": str(refresh), "access": str(refresh.access_token),
+                "user": UserSettingsSerializer(self.user).data}
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
@@ -94,6 +115,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
+    device_token = serializers.CharField(required=False, allow_blank=True, max_length=4096)
 
 
 class GoogleLoginSerializer(serializers.Serializer):
