@@ -99,6 +99,10 @@ class LogoutView(APIView):
                 token.blacklist()
         except TokenError:
             pass
+        device = ser.validated_data.get("device_token")
+        if device:
+            from notifications.models import DeviceToken
+            DeviceToken.objects.filter(user=request.user, token=device).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
