@@ -4,7 +4,7 @@ from notifications.services import send_due_reminders
 
 
 class Command(BaseCommand):
-    help = "Send monthly measurement-update reminders. Run daily from cron / Celery beat."
+    help = "Send the monthly measurement-update reminders that are due. Run HOURLY (the day and time are per user)."
 
     def handle(self, *args, **options):
         self.stdout.write(f"Sent {send_due_reminders()} reminders.")
