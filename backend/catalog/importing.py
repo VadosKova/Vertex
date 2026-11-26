@@ -1,5 +1,6 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
@@ -29,6 +30,7 @@ class CatalogDataError(Exception):
 class ImportReport:
     created: int = 0
     updated: int = 0
+    price_drops: list = field(default_factory=list)
 
     @property
     def total(self):
@@ -212,11 +214,15 @@ def import_catalog(data, dry_run=False):
                       "old_price": item["old_price"], "currency": item["currency"], "fit_type": item["fit_type"]}
             product = Product.objects.filter(brand=brand, title__iexact=item["title"], owner__isnull=True).first()
             if product:
+                old_price = product.price
                 for key, value in fields.items():
                     setattr(product, key, value)
                 product.save()
                 product.sizes.all().delete()
                 report.updated += 1
+                new_price = Decimal(str(item["price"])) if item["price"] is not None else None
+                if old_price is not None and new_price is not None and new_price < old_price:
+                    report.price_drops.append((product, old_price, new_price))
             else:
                 product = Product.objects.create(brand=brand, title=item["title"], owner=None, **fields)
                 report.created += 1
