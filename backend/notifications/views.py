@@ -3,13 +3,15 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Notification
+from .models import DeviceToken, Notification
+
+MAX_DEVICES_PER_USER = 10
 
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
-        fields = ("id", "kind", "title", "body", "read", "created_at")
+        fields = ("id", "kind", "title", "body", "action", "data", "read", "created_at")
 
 
 class NotificationPagination(PageNumberPagination):
@@ -28,7 +30,10 @@ class NotificationListView(generics.ListAPIView):
     pagination_class = NotificationPagination
 
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by("-created_at", "-id")
+        qs = Notification.objects.filter(user=self.request.user).order_by("-created_at", "-id")
+        if self.request.query_params.get("unread", "").lower() in ("1", "true", "yes"):
+            qs = qs.filter(read=False)
+        return qs
 
 
 class MarkReadView(APIView):
@@ -40,3 +45,28 @@ class MarkReadView(APIView):
             qs = qs.filter(pk=pk)
         updated = qs.filter(read=False).update(read=True)
         return Response({"updated": updated})
+
+
+class DeviceSerializer(serializers.Serializer):
+    token = serializers.CharField(min_length=8, max_length=4096)
+    platform = serializers.ChoiceField(choices=["android", "ios"], required=False, default="android")
+
+
+class DeviceView(APIView):
+    def post(self, request):
+        ser = DeviceSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        device, created = DeviceToken.objects.update_or_create(
+            token=d["token"], defaults={"user": request.user, "platform": d["platform"]})
+        extra = list(DeviceToken.objects.filter(user=request.user).order_by("-last_seen_at", "-id")
+                     .values_list("pk", flat=True)[MAX_DEVICES_PER_USER:])
+        if extra:
+            DeviceToken.objects.filter(pk__in=extra).delete()
+        return Response({"registered": True}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def delete(self, request):
+        ser = DeviceSerializer(data={**request.data, "platform": "android"})
+        ser.is_valid(raise_exception=True)
+        DeviceToken.objects.filter(user=request.user, token=ser.validated_data["token"]).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
