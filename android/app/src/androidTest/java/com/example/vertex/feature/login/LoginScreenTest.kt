@@ -9,6 +9,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.example.vertex.R
 import com.example.vertex.core.designsystem.theme.VertexTheme
 import com.example.vertex.domain.validation.FieldError
@@ -47,7 +51,18 @@ class LoginScreenTest {
     }
 
     @Test fun typingReportsText() {
-        show()
+        rule.setContent {
+            VertexTheme(darkTheme = false) {
+                var state by remember { mutableStateOf(LoginUiState()) }
+                LoginScreen(
+                    state = state,
+                    onEmailChange = { email = it; state = state.copy(email = it) },
+                    onPasswordChange = { password = it; state = state.copy(password = it) },
+                    onRememberMeChange = {}, onTogglePasswordVisibility = {},
+                    onSubmit = {}, onForgotPasswordClick = {}, onRegisterClick = {},
+                )
+            }
+        }
         rule.onNodeWithTag(LoginTestTags.EMAIL).performTextInput("john@example.com")
         rule.onNodeWithTag(LoginTestTags.PASSWORD).performTextInput("Secret1!")
         assertEquals("john@example.com", email)
