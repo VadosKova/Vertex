@@ -31,6 +31,11 @@ val VertexTypography = Typography(
         fontSize = 36.sp, lineHeight = 44.sp, letterSpacing = 2.88.sp,
     ),
 
+    headlineMedium = TextStyle(
+        fontFamily = Outfit, fontWeight = FontWeight.Bold,
+        fontSize = 28.sp, lineHeight = 36.sp,
+    ),
+
     titleMedium = TextStyle(
         fontFamily = Inter, fontWeight = FontWeight.Medium,
         fontSize = 16.sp, lineHeight = 24.sp, letterSpacing = 0.32.sp,
@@ -44,5 +49,10 @@ val VertexTypography = Typography(
     labelLarge = TextStyle(
         fontFamily = Outfit, fontWeight = FontWeight.SemiBold,
         fontSize = 16.sp, lineHeight = 24.sp, letterSpacing = 1.28.sp,
+    ),
+
+    labelMedium = TextStyle(
+        fontFamily = Inter, fontWeight = FontWeight.Medium,
+        fontSize = 12.sp, lineHeight = 16.sp,
     ),
 )
