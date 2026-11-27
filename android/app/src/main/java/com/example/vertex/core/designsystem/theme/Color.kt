@@ -14,6 +14,7 @@ internal object VertexPalette {
     val LightTextSecondary = Color(0xFF6C757D)
     val LightPrimary = Color(0xFF8B5CF6)
     val LightPrimaryVariant = Color(0xFF7C3AED)
+    val LightError = Color(0xFFDC2626)
 
     val DarkBackground = Color(0xFF0F172A)
     val DarkSurface = Color(0xFF1E293B)
@@ -21,6 +22,7 @@ internal object VertexPalette {
     val DarkTextSecondary = Color(0xFF94A3B8)
     val DarkPrimary = Color(0xFFC618FF)
     val DarkPrimaryVariant = Color(0xFFD946EF)
+    val DarkError = Color(0xFFF87171)
 }
 
 internal val LightColorScheme: ColorScheme = lightColorScheme(
@@ -32,38 +34,47 @@ internal val LightColorScheme: ColorScheme = lightColorScheme(
     onSurface = VertexPalette.LightTextPrimary,
     onSurfaceVariant = VertexPalette.LightTextSecondary,
     outline = VertexPalette.LightTextSecondary,
+    error = VertexPalette.LightError,
+    onError = Color.White,
 )
 
 internal val DarkColorScheme: ColorScheme = darkColorScheme(
     primary = VertexPalette.DarkPrimary,
-    onPrimary = Color.White,
+    onPrimary = VertexPalette.DarkTextPrimary,
     background = VertexPalette.DarkBackground,
     onBackground = VertexPalette.DarkTextPrimary,
     surface = VertexPalette.DarkSurface,
     onSurface = VertexPalette.DarkTextPrimary,
     onSurfaceVariant = VertexPalette.DarkTextSecondary,
     outline = VertexPalette.DarkTextSecondary,
+    error = VertexPalette.DarkError,
+    onError = VertexPalette.DarkBackground,
 )
-
 
 @Immutable
 data class VertexExtraColors(
     val primaryVariant: Color,
     val buttonShadow: Color,
     val logoGlow: Color,
+    val screenGlow: Color,
     val borderSubtle: Color,
+    val inputBorder: Color,
 )
 
 internal val LightExtraColors = VertexExtraColors(
     primaryVariant = VertexPalette.LightPrimaryVariant,
-    buttonShadow = Color(0x59C618FF),
+    buttonShadow = VertexPalette.LightPrimary.copy(alpha = 0.35f),
     logoGlow = VertexPalette.LightPrimary.copy(alpha = 0.30f),
+    screenGlow = VertexPalette.LightPrimary.copy(alpha = 0.22f),
     borderSubtle = VertexPalette.LightTextSecondary.copy(alpha = 0.25f),
+    inputBorder = VertexPalette.LightTextSecondary.copy(alpha = 0.30f),
 )
 
 internal val DarkExtraColors = VertexExtraColors(
     primaryVariant = VertexPalette.DarkPrimaryVariant,
-    buttonShadow = Color(0x59C618FF),
+    buttonShadow = VertexPalette.DarkPrimary.copy(alpha = 0.45f),
     logoGlow = VertexPalette.DarkPrimary.copy(alpha = 0.35f),
+    screenGlow = VertexPalette.DarkPrimary.copy(alpha = 0.30f),
     borderSubtle = VertexPalette.DarkTextSecondary.copy(alpha = 0.25f),
+    inputBorder = VertexPalette.DarkTextSecondary.copy(alpha = 0.30f),
 )
