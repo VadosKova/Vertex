@@ -10,16 +10,6 @@ import com.example.vertex.domain.repository.SettingsRepository
 import com.example.vertex.domain.usecase.ObserveThemeModeUseCase
 import com.example.vertex.domain.usecase.SetThemeModeUseCase
 
-private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "vertex_settings")
-
 class VertexApp : Application() {
     val container: AppContainer by lazy { AppContainer(this) }
-}
-
-class AppContainer(context: Context) {
-    private val settingsRepository: SettingsRepository =
-        DataStoreSettingsRepository(context.applicationContext.settingsDataStore)
-
-    val observeThemeMode = ObserveThemeModeUseCase(settingsRepository)
-    val setThemeMode = SetThemeModeUseCase(settingsRepository)
 }

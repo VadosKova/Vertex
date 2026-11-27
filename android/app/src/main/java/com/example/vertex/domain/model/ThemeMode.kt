@@ -12,7 +12,6 @@ enum class ThemeMode {
     }
 
     companion object {
-        /** Світла тема — тема за замовчуванням (рішення з дизайну). Для «як у системі» постав SYSTEM. */
         val DEFAULT: ThemeMode = LIGHT
     }
 }

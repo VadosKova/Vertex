@@ -11,7 +11,7 @@ class LoginUseCase(
     suspend operator fun invoke(email: String, password: String, rememberMe: Boolean): LoginResult {
         val result = authRepository.login(
             email = email.trim().lowercase(),
-            password = password, // пароль не обрізаємо і не змінюємо
+            password = password,
             rememberMe = rememberMe,
         )
         if (result is LoginResult.Success) sessionStorage.save(result.session)

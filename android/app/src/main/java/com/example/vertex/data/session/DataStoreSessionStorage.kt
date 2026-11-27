@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
-/** Токени зберігаються лише у зашифрованому вигляді, профіль (не секретний) — як є. */
 class DataStoreSessionStorage(
     private val dataStore: DataStore<Preferences>,
     private val cipher: TokenCipher,
@@ -58,7 +57,7 @@ class DataStoreSessionStorage(
                 ),
             )
         } catch (e: Exception) {
-            null // ключ втрачено/дані пошкоджено → вважаємо, що сесії немає (користувач увійде знову)
+            null
         }
     }
 

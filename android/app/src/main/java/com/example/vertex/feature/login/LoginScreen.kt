@@ -64,7 +64,6 @@ object LoginTestTags {
     const val PASSWORD = "login_password"
 }
 
-/** Обгортка зі станом: підключає ViewModel до stateless [LoginScreen]. */
 @Composable
 fun LoginRoute(
     onLoggedIn: () -> Unit,
@@ -113,7 +112,6 @@ fun LoginScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            // Ореол у верхньому правому куті (Figma: коло 240dp, центр у (W-106, 0))
             .drawBehind {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -186,8 +184,6 @@ private fun Form(
 ) {
     val credentialsRejected = state.formError == FormError.INVALID_CREDENTIALS
 
-    // Відступи задані явно: чекбокс і лінки мають touch-target 48dp, тому візуальні проміжки з макета
-    // (20dp) складаються з Spacer + внутрішнього padding елемента.
     Column {
         state.formError?.let { error ->
             val (title, hint) = error.texts()
@@ -234,7 +230,7 @@ private fun Form(
             },
         )
 
-        Spacer(Modifier.height(7.dp)) // 7 + 13 (padding чекбокса) = 20dp
+        Spacer(Modifier.height(7.dp))
 
         VertexCheckbox(
             checked = state.rememberMe,
@@ -251,7 +247,7 @@ private fun Form(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(6.dp)) // 6 + 14 (padding лінка) = 20dp
+        Spacer(Modifier.height(6.dp))
 
         Text(
             text = stringResource(R.string.login_forgot_password),

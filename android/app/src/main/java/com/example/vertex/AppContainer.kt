@@ -19,20 +19,14 @@ import com.example.vertex.domain.usecase.SetThemeModeUseCase
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "vertex_settings")
 private val Context.sessionDataStore: DataStore<Preferences> by preferencesDataStore(name = "vertex_session")
 
-/**
- * Ручний DI (без kapt/KSP). Важкі об'єкти (Retrofit, Keystore) створюються ліниво,
- * щоб не сповільнювати холодний старт.
- */
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
-    // --- налаштування (тема) ---
     private val settingsRepository: SettingsRepository =
         DataStoreSettingsRepository(appContext.settingsDataStore)
     val observeThemeMode = ObserveThemeModeUseCase(settingsRepository)
     val setThemeMode = SetThemeModeUseCase(settingsRepository)
 
-    // --- авторизація ---
     private val authApi: AuthApi by lazy {
         ApiClient.createRetrofit(BuildConfig.API_BASE_URL).create(AuthApi::class.java)
     }

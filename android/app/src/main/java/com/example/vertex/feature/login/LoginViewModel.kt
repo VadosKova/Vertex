@@ -41,7 +41,7 @@ class LoginViewModel(
 
     fun onSubmit() {
         val current = _state.value
-        if (current.isLoading) return // захист від подвійного натискання
+        if (current.isLoading) return
 
         val emailError = CredentialsValidator.validateEmail(current.email)
         val passwordError = CredentialsValidator.validatePassword(current.password)

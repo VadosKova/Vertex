@@ -3,7 +3,7 @@ package com.example.vertex.feature.login
 import com.example.vertex.domain.model.AuthError
 import com.example.vertex.domain.validation.FieldError
 
-/** Помилка форми цілком (показується банером над полями). */
+
 enum class FormError { INVALID_CREDENTIALS, NETWORK, TOO_MANY_REQUESTS, SERVER, UNKNOWN }
 
 data class LoginUiState(

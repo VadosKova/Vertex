@@ -9,12 +9,11 @@ import retrofit2.Retrofit
 
 object ApiClient {
     private val json = Json {
-        ignoreUnknownKeys = true   // бекенд може додавати поля — клієнт не ламається
+        ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
     fun createRetrofit(baseUrl: String): Retrofit {
-        // Свідомо БЕЗ логування тіла запитів: у ньому пароль і токени.
         val client = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)

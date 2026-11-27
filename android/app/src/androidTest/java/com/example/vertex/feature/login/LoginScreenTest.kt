@@ -9,7 +9,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.assertDoesNotExist
 import com.example.vertex.R
 import com.example.vertex.core.designsystem.theme.VertexTheme
 import com.example.vertex.domain.validation.FieldError
@@ -63,7 +62,7 @@ class LoginScreenTest {
         rule.onNodeWithContentDescription(str(R.string.password_show)).performClick()
         rule.onNodeWithText(str(R.string.login_remember_me)).performClick()
         assertEquals(1, submits); assertEquals(1, forgots); assertEquals(1, registers); assertEquals(1, toggles)
-        assertEquals(false, remember) // за замовчуванням увімкнено → клік вимикає
+        assertEquals(false, remember)
     }
 
     @Test fun noBannerByDefault() {
@@ -95,7 +94,7 @@ class LoginScreenTest {
 
     @Test fun loadingButtonIgnoresClicks() {
         show(LoginUiState(isLoading = true))
-        rule.onNodeWithText(str(R.string.login_button)).assertDoesNotExist() // замість тексту — індикатор
+        rule.onNodeWithText(str(R.string.login_button)).assertDoesNotExist()
         assertEquals(0, submits)
     }
 }

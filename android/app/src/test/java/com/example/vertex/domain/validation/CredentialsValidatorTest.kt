@@ -24,6 +24,6 @@ class CredentialsValidatorTest {
     @Test fun `empty password is rejected, any non-empty password passes`() {
         assertEquals(FieldError.EMPTY, CredentialsValidator.validatePassword(""))
         assertNull(CredentialsValidator.validatePassword("x"))
-        assertNull(CredentialsValidator.validatePassword("   ")) // пробіли — валідний (але неправильний) пароль, вирішує сервер
+        assertNull(CredentialsValidator.validatePassword("   "))
     }
 }

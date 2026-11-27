@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Контракт із Django: формат запиту/відповіді POST /api/v1/auth/token/ (accounts/serializers.py). */
+
 class AuthDtosTest {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 

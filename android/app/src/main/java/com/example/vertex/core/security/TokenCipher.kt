@@ -9,7 +9,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Шифрування чутливих рядків (JWT). Ключ живе в Android Keystore і не покидає пристрій. */
 interface TokenCipher {
     fun encrypt(plain: String): String
     fun decrypt(encoded: String): String
