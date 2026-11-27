@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_title">Welcome back!</string>
+    <string name="login_subtitle">Sign in to your Vertex account</string>
+    <string name="field_email">Email</string>
+    <string name="field_password">Password</string>
+    <string name="login_remember_me">Remember me</string>
+    <string name="login_button">SIGN IN</string>
+    <string name="login_forgot_password">Forgot password?</string>
+    <string name="login_no_account">Don\'t have an account?</string>
+    <string name="login_register">Sign up</string>
+
+    <string name="password_show">Show password</string>
+    <string name="password_hide">Hide password</string>
+
+    <string name="field_error_email_empty">Enter your email</string>
+    <string name="field_error_email_invalid">Invalid email address</string>
+    <string name="field_error_password_empty">Enter your password</string>
+
+    <string name="error_credentials_title">Incorrect email or password</string>
+    <string name="error_credentials_hint">Check your details and try again.</string>
+    <string name="error_network_title">No connection to the server</string>
+    <string name="error_network_hint">Check your internet and try again.</string>
+    <string name="error_too_many_title">Too many sign-in attempts</string>
+    <string name="error_too_many_hint">Wait a minute and try again.</string>
+    <string name="error_server_title">Server is temporarily unavailable</string>
+    <string name="error_server_hint">Please try again later.</string>
+    <string name="error_unknown_title">Something went wrong</string>
+    <string name="error_unknown_hint">Please try again.</string>
+
+    <string name="placeholder_forgot">Password recovery (next stage)</string>
+    <string name="placeholder_home">Home screen (next stage)</string>
+</resources>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_title">З поверненням!</string>
+    <string name="login_subtitle">Увійдіть у свій акаунт Vertex</string>
+    <string name="field_email">Електронна пошта</string>
+    <string name="field_password">Пароль</string>
+    <string name="login_remember_me">Запам\'ятати мене</string>
+    <string name="login_button">УВІЙТИ</string>
+    <string name="login_forgot_password">Забули пароль?</string>
+    <string name="login_no_account">Ще не маєте акаунта?</string>
+    <string name="login_register">Зареєструватися</string>
+
+    <string name="password_show">Показати пароль</string>
+    <string name="password_hide">Сховати пароль</string>
+
+    <string name="field_error_email_empty">Введіть e-mail</string>
+    <string name="field_error_email_invalid">Некоректний e-mail</string>
+    <string name="field_error_password_empty">Введіть пароль</string>
+
+    <string name="error_credentials_title">Невірний e-mail або пароль</string>
+    <string name="error_credentials_hint">Перевірте дані та спробуйте ще раз.</string>
+    <string name="error_network_title">Немає з\'єднання із сервером</string>
+    <string name="error_network_hint">Перевірте інтернет і спробуйте ще раз.</string>
+    <string name="error_too_many_title">Забагато спроб входу</string>
+    <string name="error_too_many_hint">Зачекайте хвилину й спробуйте знову.</string>
+    <string name="error_server_title">Сервер тимчасово недоступний</string>
+    <string name="error_server_hint">Спробуйте пізніше.</string>
+    <string name="error_unknown_title">Щось пішло не так</string>
+    <string name="error_unknown_hint">Спробуйте ще раз.</string>
+
+    <string name="placeholder_forgot">Відновлення пароля (наступний етап)</string>
+    <string name="placeholder_home">Головний екран (наступний етап)</string>
+</resources>
